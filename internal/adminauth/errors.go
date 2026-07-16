@@ -10,5 +10,6 @@ const (
 	CodeSessionExpired     = "session_expired"
 	CodeCSRFMismatch       = "csrf_mismatch"
 	CodeForbiddenProject   = "forbidden_project"
+	CodeForbiddenRole      = "forbidden_role"
 	CodeTooManyAttempts    = "too_many_attempts"
 )

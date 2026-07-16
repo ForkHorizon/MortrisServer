@@ -60,4 +60,6 @@ resend."
 | `session_expired` | 401 | Session hit its idle timeout (30 min) or absolute timeout (12h) (section 10.3). |
 | `csrf_mismatch` | 403 | The `X-CSRF-Token` header didn't match the `csrf_token` cookie, or either was missing, on a state-changing request. |
 | `forbidden_project` | 403 | The session isn't scoped to the requested `project` (section 10.3: "each scoped to explicit projects"). |
+| `forbidden_role` | 403 | The action requires the `admin` role; the session is `viewer` (installation timeline, policy administration — section 10.2 #5, Phase S3 kill-switch). |
 | `too_many_attempts` | 429 | Login throttle hit (10/minute per email, 30/minute per source IP). |
+| `not_found` | 404 | The requested installation ID or policy rule ID doesn't exist (or doesn't belong to the given project). |
