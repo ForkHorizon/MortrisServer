@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "project_id": "puzzle-production",
+  "install_id": "09ffb634-1792-40cd-bd9e-0a89938ff411",
+  "sdk": { "name": "daliys-unity", "version": "0.1.0" },
+  "sent_at_client": "2026-07-16T12:00:00.000Z",
+  "events": [
+    {
+      "event_id": "79ff0c7c-10a9-4b95-93c4-186079fa5b41",
+      "session_id": "33cef303-b1e3-47b9-a6e6-28322cd927ee",
+      "sequence": 1,
+      "session_elapsed_ms": 100,
+      "name": "level_start",
+      "occurred_at_client": "2026-07-16T11:59:58.421Z",
+      "app_version": "1.4.0",
+      "build_number": "140",
+      "platform": "android",
+      "os_version": "15",
+      "device_class": "phone",
+      "locale": "en-US",
+      "timezone_offset_minutes": 120,
+      "properties": {}
+    },
+    {
+      "event_id": "79ff0c7c-10a9-4b95-93c4-186079fa5b41",
+      "session_id": "33cef303-b1e3-47b9-a6e6-28322cd927ee",
+      "sequence": 2,
+      "session_elapsed_ms": 200,
+      "name": "level_end",
+      "occurred_at_client": "2026-07-16T11:59:59.421Z",
+      "app_version": "1.4.0",
+      "build_number": "140",
+      "platform": "android",
+      "os_version": "15",
+      "device_class": "phone",
+      "locale": "en-US",
+      "timezone_offset_minutes": 120,
+      "properties": {}
+    }
+  ]
+}

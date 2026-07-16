@@ -1,0 +1,354 @@
+openapi: 3.1.0
+info:
+  title: Daliys Analytics Server — SDK & Dashboard API
+  version: "1"
+  description: >
+    Authoritative wire contract for the analytics server. The SDK-facing
+    /v1 endpoints below are fully specified per
+    server_implementation_plan.md section 5 — any change here must update
+    contracts/fixtures, internal/contracts, and the Unity SDK together.
+    The /api/v1 dashboard endpoints are path stubs; their request/response
+    schemas are specified in Phase S2/S3 once the query API is built.
+servers:
+  - url: https://analytics.example.com
+
+components:
+  securitySchemes:
+    installationBearer:
+      type: http
+      scheme: bearer
+      description: The installation_credential returned implicitly by registration.
+    dashboardSession:
+      type: apiKey
+      in: cookie
+      name: session
+
+  schemas:
+    ClientPolicy:
+      type: object
+      required: [mode, next_check_seconds, discard_pending]
+      properties:
+        mode:
+          type: string
+          enum: [active, pause_upload, disable_collection]
+        next_check_seconds:
+          type: integer
+          minimum: 1
+        discard_pending:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [server_time, code, message, request_id]
+      properties:
+        server_time: { type: string, format: date-time }
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - project_id
+        - install_id
+        - installation_credential
+        - sdk_name
+        - sdk_version
+        - app_version
+        - build_number
+        - platform
+      properties:
+        schema_version: { type: integer, const: 1 }
+        project_id: { type: string }
+        install_id: { type: string, format: uuid }
+        installation_credential:
+          type: string
+          description: 32 cryptographically random bytes, unpadded base64url.
+        sdk_name: { type: string }
+        sdk_version: { type: string }
+        app_version: { type: string }
+        build_number: { type: string }
+        platform: { type: string }
+
+    RegisterResponse:
+      type: object
+      required: [server_time, installation_status, client_policy]
+      properties:
+        server_time: { type: string, format: date-time }
+        installation_status: { type: string, enum: [registered] }
+        client_policy: { $ref: "#/components/schemas/ClientPolicy" }
+
+    EventProperties:
+      type: object
+      description: >
+        At most 32 flat keys. Values are string (<=1024 UTF-8 bytes),
+        finite number, boolean, or null. Arrays and nested objects are
+        rejected. Encoded properties are at most 8 KiB total.
+      additionalProperties:
+        oneOf:
+          - type: string
+          - type: number
+          - type: boolean
+          - type: "null"
+
+    Event:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - session_id
+        - sequence
+        - session_elapsed_ms
+        - name
+        - occurred_at_client
+        - app_version
+        - build_number
+        - platform
+        - os_version
+        - device_class
+        - locale
+        - timezone_offset_minutes
+        - properties
+      properties:
+        event_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 0 }
+        session_elapsed_ms: { type: integer, minimum: 0 }
+        name:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+          description: >
+            sys_ prefix is reserved for SDK-owned system events
+            (sys_session_start, sys_app_background, sys_sdk_health).
+        occurred_at_client: { type: string, format: date-time }
+        app_version: { type: string }
+        build_number: { type: string }
+        platform: { type: string }
+        os_version: { type: string }
+        device_class: { type: string }
+        locale: { type: string }
+        timezone_offset_minutes: { type: integer }
+        properties: { $ref: "#/components/schemas/EventProperties" }
+
+    BatchIngestRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, project_id, install_id, sdk, sent_at_client, events]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        project_id: { type: string }
+        install_id: { type: string, format: uuid }
+        sdk:
+          type: object
+          additionalProperties: false
+          required: [name, version]
+          properties:
+            name: { type: string }
+            version: { type: string }
+        sent_at_client: { type: string, format: date-time }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Event" }
+
+    RejectedEvent:
+      type: object
+      required: [event_id, code]
+      properties:
+        event_id: { type: string }
+        code: { type: string }
+
+    BatchIngestResponse:
+      type: object
+      required: [server_time, accepted, duplicates, rejected, client_policy]
+      properties:
+        server_time: { type: string, format: date-time }
+        accepted: { type: array, items: { type: string } }
+        duplicates: { type: array, items: { type: string } }
+        rejected: { type: array, items: { $ref: "#/components/schemas/RejectedEvent" } }
+        client_policy: { $ref: "#/components/schemas/ClientPolicy" }
+
+    PolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, project_id, install_id, sdk, app_version, build_number, platform]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        project_id: { type: string }
+        install_id: { type: string, format: uuid }
+        sdk:
+          type: object
+          additionalProperties: false
+          required: [name, version]
+          properties:
+            name: { type: string }
+            version: { type: string }
+        app_version: { type: string }
+        build_number: { type: string }
+        platform: { type: string }
+
+    PolicyResponse:
+      type: object
+      required: [server_time, client_policy]
+      properties:
+        server_time: { type: string, format: date-time }
+        client_policy: { $ref: "#/components/schemas/ClientPolicy" }
+
+  responses:
+    Error:
+      description: Stable machine-readable error. See docs/errors.md for the code list and retry classification.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+paths:
+  /v1/installs/register:
+    post:
+      summary: Idempotent anonymous installation registration
+      description: See server_implementation_plan.md section 5.2 for the atomic-behavior rules (unknown ID, matching retry, credential conflict).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "200":
+          description: Registered, or a lost-response retry of an identical prior registration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+        "409":
+          description: install_conflict — install_id already registered with a different credential.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /v1/events/batch:
+    post:
+      summary: Authenticated gzip batch event ingestion
+      security:
+        - installationBearer: []
+      description: See server_implementation_plan.md section 5.4 for limits and the accept/duplicate/reject transaction rules.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchIngestRequest" }
+      responses:
+        "200":
+          description: Processed. Individual events may still be listed as rejected — check the rejected array, not just the status code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchIngestResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503":
+          description: server_storage_pressure or maintenance. Includes Retry-After.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/client/policy:
+    post:
+      summary: Lightweight authenticated policy probe (no events)
+      security:
+        - installationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PolicyRequest" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  # --- Dashboard API (section 10.1) ---------------------------------------
+  # Path stubs only. Request/response schemas land in Phase S2 (auth +
+  # overview/events) and Phase S3 (funnel/retention/timeline/catalog/system)
+  # once the read-only query surface is implemented — writing detailed
+  # schemas now would be guessing fields the plan doesn't specify yet.
+
+  /api/v1/auth/login:
+    post:
+      summary: Admin/viewer login (Phase S2)
+      security: []
+      responses:
+        "200": { description: Specified in Phase S2. }
+
+  /api/v1/auth/logout:
+    post:
+      summary: Invalidate the current dashboard session (Phase S2)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "204": { description: Specified in Phase S2. }
+
+  /api/v1/auth/session:
+    get:
+      summary: Current dashboard session identity and role (Phase S2)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S2. }
+
+  /api/v1/analytics/overview:
+    get:
+      summary: Overview screen metrics (Phase S2)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S2. }
+
+  /api/v1/analytics/events:
+    get:
+      summary: Event explorer trends (Phase S2)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S2. }
+
+  /api/v1/analytics/funnel:
+    get:
+      summary: Funnel conversion query (Phase S3)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S3. }
+
+  /api/v1/analytics/retention:
+    get:
+      summary: D1/D7/D30 installation retention cohorts (Phase S3)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S3. }
+
+  /api/v1/analytics/installations/{id}:
+    get:
+      summary: Single installation event timeline, admin-only (Phase S3)
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Specified in Phase S3. }
+
+  /api/v1/analytics/catalog:
+    get:
+      summary: Event catalog definitions and validation status (Phase S3)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S3. }
+
+  /api/v1/system:
+    get:
+      summary: System health — build/API version, DB latency, ingestion rate, disk state (Phase S3)
+      security: [{ dashboardSession: [] }]
+      responses:
+        "200": { description: Specified in Phase S3. }

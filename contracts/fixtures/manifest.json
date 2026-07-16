@@ -1,0 +1,16 @@
+{
+  "fixtures": [
+    { "file": "register_valid.json", "kind": "register", "expect": "valid" },
+    { "file": "register_unknown_field.json", "kind": "register", "expect": { "envelope": "invalid", "code": "unknown_field" } },
+    { "file": "register_bad_credential_length.json", "kind": "register", "expect": { "envelope": "invalid", "code": "invalid_credential" } },
+
+    { "file": "ingest_valid.json", "kind": "batch", "expect": "valid" },
+    { "file": "ingest_invalid_bad_name.json", "kind": "batch", "expect": { "perEvent": [ { "index": 0, "result": "invalid", "code": "invalid_event_name" } ] } },
+    { "file": "ingest_invalid_reserved_sys_prefix.json", "kind": "batch", "expect": { "perEvent": [ { "index": 0, "result": "invalid", "code": "reserved_event_name" } ] } },
+    { "file": "ingest_invalid_too_many_properties.json", "kind": "batch", "expect": { "perEvent": [ { "index": 0, "result": "invalid", "code": "too_many_properties" } ] } },
+    { "file": "ingest_invalid_nested_property.json", "kind": "batch", "expect": { "perEvent": [ { "index": 0, "result": "invalid", "code": "invalid_property_type" } ] } },
+    { "file": "ingest_invalid_duplicate_event_id.json", "kind": "batch", "expect": { "envelope": "invalid", "code": "duplicate_event_id_in_batch" } },
+    { "file": "ingest_invalid_batch_size.json", "kind": "batch", "expect": { "envelope": "invalid", "code": "invalid_batch_size" } },
+    { "file": "ingest_partial_valid.json", "kind": "batch", "expect": { "perEvent": [ { "index": 0, "result": "valid" }, { "index": 1, "result": "invalid", "code": "invalid_event_name" } ] } }
+  ]
+}
