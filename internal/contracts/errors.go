@@ -19,10 +19,12 @@ const (
 	CodeInvalidPropertyKey      = "invalid_property_key"
 	CodeInvalidPropertyType     = "invalid_property_type"
 	CodePropertyTooLarge        = "property_too_large"
+	CodeUnknownEvent            = "unknown_event"
 	CodePropertiesTooLarge      = "properties_too_large"
 	CodeUnauthorized            = "unauthorized"
 	CodeRateLimited             = "rate_limited"
 	CodeServerStoragePressure   = "server_storage_pressure"
+	CodeInternal                = "internal_error"
 )
 
 // ValidationError reports one structural contract violation. For batch

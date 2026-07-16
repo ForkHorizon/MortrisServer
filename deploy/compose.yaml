@@ -1,0 +1,62 @@
+# Local dev stack (section 13.1): Caddy, Go service, PostgreSQL.
+#
+#   docker compose -f deploy/compose.yaml up --build
+#
+# Uses one shared "postgres" superuser role for simplicity — the real
+# per-purpose role separation (deploy/db/roles.sql, section 8.1) is applied
+# against the actual production cluster in Phase S4, not reproduced here.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_DB: mortris
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["migrate"]
+    environment:
+      MORTRIS_MIGRATOR_DSN: postgres://postgres:${POSTGRES_SUPERUSER_PASSWORD:-postgres}@postgres:5432/mortris?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["serve"]
+    environment:
+      LISTEN_ADDR: ":8080"
+      MORTRIS_WRITER_DSN: postgres://postgres:${POSTGRES_SUPERUSER_PASSWORD:-postgres}@postgres:5432/mortris?sslmode=disable
+      MORTRIS_DISK_PATH: "/"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "8080:8080"
+    depends_on: [app]
+    networks: [internal]
+
+networks:
+  internal: {}
+
+volumes:
+  pgdata: {}

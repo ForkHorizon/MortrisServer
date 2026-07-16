@@ -1,0 +1,15 @@
+# Local dev only — no real domain/TLS here (that's Phase S4's production
+# Caddyfile, kept alongside the runbook once there's a real host to point
+# it at). This still exercises the section 13.2 shape: Caddy is the only
+# service with a published port, and it enforces a body-size ceiling in
+# front of Go's own limit.
+{
+	admin off
+}
+
+:8080 {
+	request_body {
+		max_size 256KB
+	}
+	reverse_proxy app:8080
+}
