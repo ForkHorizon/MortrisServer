@@ -29,33 +29,64 @@ silently change") before altering any of the above.
 ## Layout
 
 ```text
-cmd/analytics-server/   Single binary entrypoint
-internal/contracts/     Wire types + structural validation shared by the
-                         service and the fixture tests below
+cmd/analytics-server/   Single binary: migrate, serve, export-events,
+                         parity-report, create-admin subcommands
+internal/contracts/     SDK wire types + structural validation, shared by
+                         the service and contracts/fixtures_test.go
+internal/store/         pgx pool + migration runner
+internal/ingest/        Registration, batch ingestion, client policy
+                         (section 5) — HTTP-agnostic
+internal/adminauth/     Dashboard operator auth: Argon2id, sessions,
+                         CSRF, login throttling (section 10.3)
+internal/analytics/     Read-only metrics queries behind the dashboard
+                         (section 9, 10.1) — Overview, Event Explorer
+internal/httpapi/       net/http routing, body limits, JSON envelopes,
+                         error rendering for both the SDK and dashboard APIs
+internal/ratelimit/     In-process token buckets (section 6)
+internal/diskstate/     Disk-pressure classification (section 12)
+internal/maintenance/   Retention + unactivated-installation cleanup,
+                         disk-state monitor
+migrations/             Flat, numbered, idempotent SQL migrations
+deploy/                 Dockerfile, Compose stack, dev Caddyfile, DB roles
 contracts/openapi.yaml  Authoritative OpenAPI 3.1 spec for /v1 (SDK) and
-                         /api/v1 (dashboard, stubbed until Phase S2/S3)
+                         /api/v1 (dashboard)
 contracts/fixtures/     Valid/invalid request fixtures + manifest.json
                          driving contracts/fixtures_test.go
 events/catalog.yaml     Event catalog format + the v1 reserved system events
-docs/errors.md          Stable error codes, HTTP status, retry class
-docs/metrics.md         Metric definitions (SQL implementation: Phase S2/S3)
+docs/errors.md          Stable error codes, HTTP status, retry class —
+                         SDK and dashboard API
+docs/metrics.md         Metric definitions, verified by
+                         internal/analytics/metrics_test.go
 docs/threat-model.md    Threats and mitigations
 docs/data-inventory.md  What's stored, per table, and what's never collected
 ```
 
-Phases S1+ (registration, ingestion, PostgreSQL schema, dashboard, CLI
-tools, production hardening) are tracked and built incrementally — see the
-plan's section 14 for exit gates per phase.
+Phases S3+ (funnel/retention/timeline/catalog/system screens, production
+hardening) are tracked and built incrementally — see the plan's section 14
+for exit gates per phase.
 
 ## Verify
 
 ```sh
 make lint   # go vet + gofmt check
-make test   # go test ./...  (loads every fixture in contracts/fixtures)
+make test   # go test ./...  (contracts fixtures always run; internal/analytics's
+            #   fixture-dataset tests need MORTRIS_TEST_DSN set to a real Postgres,
+            #   otherwise they skip)
 make build  # bin/analytics-server
+```
+
+Local end-to-end verification (no Docker required):
+
+```sh
+export MORTRIS_MIGRATOR_DSN=postgres://.../mortris_dev
+export MORTRIS_WRITER_DSN=postgres://.../mortris_dev
+bin/analytics-server migrate
+bin/analytics-server create-admin --email you@example.com --role admin --projects your-project
+bin/analytics-server serve
 ```
 
 ## Toolchain
 
-Go 1.26.x (pinned in `go.mod`). No other runtime dependency yet — Phase S1
-adds `pgx/v5` and PostgreSQL.
+Go 1.26.x (pinned in `go.mod`), PostgreSQL 18.x, `pgx/v5`. Docker/Compose
+is optional — `deploy/compose.yaml` runs the full stack, but every
+subcommand also runs directly against any reachable PostgreSQL.

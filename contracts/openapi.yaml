@@ -7,8 +7,9 @@ info:
     /v1 endpoints below are fully specified per
     server_implementation_plan.md section 5 — any change here must update
     contracts/fixtures, internal/contracts, and the Unity SDK together.
-    The /api/v1 dashboard endpoints are path stubs; their request/response
-    schemas are specified in Phase S2/S3 once the query API is built.
+    The /api/v1 dashboard endpoints are specified through Overview/Event
+    Explorer/auth (Phase S2); funnel/retention/timeline/catalog/system
+    remain path stubs until Phase S3.
 servers:
   - url: https://analytics.example.com
 
@@ -197,6 +198,86 @@ components:
         server_time: { type: string, format: date-time }
         client_policy: { $ref: "#/components/schemas/ClientPolicy" }
 
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      required: [role, project_ids, expires_at]
+      properties:
+        role: { type: string, enum: [admin, viewer] }
+        project_ids: { type: array, items: { type: string } }
+        expires_at: { type: string, format: date-time }
+
+    SessionInfo:
+      type: object
+      required: [email, role, project_ids]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, viewer] }
+        project_ids: { type: array, items: { type: string } }
+
+    Overview:
+      type: object
+      description: See docs/metrics.md for every field's exact definition.
+      required:
+        - product_events, new_installations, daily_active_installations,
+          weekly_active_installations, monthly_active_installations, sessions,
+          avg_observed_session_duration_ms, ingestion_accepted, ingestion_duplicates, ingestion_rejected
+      properties:
+        product_events: { type: integer }
+        new_installations: { type: integer }
+        daily_active_installations: { type: integer }
+        weekly_active_installations: { type: integer }
+        monthly_active_installations: { type: integer }
+        sessions: { type: integer }
+        avg_observed_session_duration_ms: { type: number }
+        ingestion_accepted: { type: integer }
+        ingestion_duplicates: { type: integer }
+        ingestion_rejected: { type: integer }
+
+    EventExplorerResult:
+      type: object
+      required: [total_events, active_installations, trend]
+      properties:
+        total_events: { type: integer }
+        active_installations: { type: integer }
+        trend:
+          type: array
+          items:
+            type: object
+            required: [day, count]
+            properties:
+              day: { type: string, format: date }
+              count: { type: integer }
+
+  parameters:
+    Project:
+      name: project
+      in: query
+      required: true
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      description: RFC 3339. Defaults to 7 days before `to`.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: RFC 3339. Defaults to now. Window (to - from) cannot exceed 90 days.
+      schema: { type: string, format: date-time }
+    Timezone:
+      name: timezone
+      in: query
+      description: IANA timezone name. Defaults to UTC.
+      schema: { type: string }
+
   responses:
     Error:
       description: Stable machine-readable error. See docs/errors.md for the code list and retry classification.
@@ -273,45 +354,110 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
 
   # --- Dashboard API (section 10.1) ---------------------------------------
-  # Path stubs only. Request/response schemas land in Phase S2 (auth +
-  # overview/events) and Phase S3 (funnel/retention/timeline/catalog/system)
-  # once the read-only query surface is implemented — writing detailed
-  # schemas now would be guessing fields the plan doesn't specify yet.
+  # Auth + Overview/Event Explorer are fully specified (Phase S2).
+  # funnel/retention/timeline/catalog/system remain path stubs until Phase
+  # S3's read-only query surface exists for them.
 
   /api/v1/auth/login:
     post:
-      summary: Admin/viewer login (Phase S2)
+      summary: Admin/viewer login (section 10.3)
       security: []
+      description: >
+        No public account creation — an admin_users row only ever comes
+        from the create-admin CLI. Throttled per email and per source IP;
+        the error is identical whether the account doesn't exist, is
+        disabled, or the password is wrong.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
-        "200": { description: Specified in Phase S2. }
+        "200":
+          description: Sets the session (HttpOnly) and csrf_token (JS-readable) cookies.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
 
   /api/v1/auth/logout:
     post:
-      summary: Invalidate the current dashboard session (Phase S2)
+      summary: Invalidate the current dashboard session
       security: [{ dashboardSession: [] }]
+      description: Requires the X-CSRF-Token header to match the csrf_token cookie (double-submit, section 10.3). Idempotent.
       responses:
-        "204": { description: Specified in Phase S2. }
+        "204": { description: Session revoked (or was already invalid). }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/auth/session:
     get:
-      summary: Current dashboard session identity and role (Phase S2)
+      summary: Current dashboard session identity and role
       security: [{ dashboardSession: [] }]
       responses:
-        "200": { description: Specified in Phase S2. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionInfo" }
+        "401": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/overview:
     get:
-      summary: Overview screen metrics (Phase S2)
+      summary: Overview screen metrics (section 10.2 #1)
       security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
       responses:
-        "200": { description: Specified in Phase S2. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/events:
     get:
-      summary: Event explorer trends (Phase S2)
+      summary: Event explorer trends (section 10.2 #2)
       security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
+        - name: name
+          in: query
+          description: Must be a name in the project's event catalog (or a reserved system event).
+          schema: { type: string }
+        - name: app_version
+          in: query
+          schema: { type: string }
+        - name: build_number
+          in: query
+          schema: { type: string }
+        - name: platform
+          in: query
+          schema: { type: string }
+        - name: property_key
+          in: query
+          description: Requires `name`; must be declared in that event's catalog entry. Requires property_value.
+          schema: { type: string }
+        - name: property_value
+          in: query
+          description: Requires property_key.
+          schema: { type: string }
       responses:
-        "200": { description: Specified in Phase S2. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventExplorerResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/funnel:
     get:

@@ -16,11 +16,17 @@ type Config struct {
 	// changes, never by the running service (section 8.1).
 	MigratorDSN string
 
-	// WriterDSN is used by `serve` and the admin CLI subcommands
-	// (export-events, parity-report). A dedicated analytics_reader pool
-	// is added in Phase S2 once the dashboard query API exists.
+	// WriterDSN is used by `serve` (SDK endpoints, admin auth) and the
+	// admin CLI subcommands (export-events, parity-report, create-admin).
 	WriterDSN      string
 	WriterMaxConns int32
+
+	// ReaderDSN backs the dashboard analytics query pool (section 8.1,
+	// 10.1) — a separate, smaller, read-only pool so a runaway query
+	// competes with other dashboard reads, never with ingestion. Falls
+	// back to WriterDSN if unset, so local dev doesn't need two DSNs.
+	ReaderDSN      string
+	ReaderMaxConns int32
 
 	// DiskPath is the filesystem whose free space is evaluated for the
 	// disk-pressure states in section 12.
@@ -28,13 +34,19 @@ type Config struct {
 }
 
 func Load() Config {
-	return Config{
+	cfg := Config{
 		ListenAddr:     envOr("LISTEN_ADDR", ":8080"),
 		MigratorDSN:    os.Getenv("MORTRIS_MIGRATOR_DSN"),
 		WriterDSN:      os.Getenv("MORTRIS_WRITER_DSN"),
 		WriterMaxConns: int32(envInt("MORTRIS_WRITER_MAX_CONNS", 20)),
+		ReaderDSN:      os.Getenv("MORTRIS_READER_DSN"),
+		ReaderMaxConns: int32(envInt("MORTRIS_READER_MAX_CONNS", 10)),
 		DiskPath:       envOr("MORTRIS_DISK_PATH", "/"),
 	}
+	if cfg.ReaderDSN == "" {
+		cfg.ReaderDSN = cfg.WriterDSN
+	}
+	return cfg
 }
 
 func envOr(key, fallback string) string {

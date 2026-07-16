@@ -27,8 +27,14 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	}
 	defer pool.Close()
 
+	readerPool, err := store.NewPool(ctx, cfg.ReaderDSN, cfg.ReaderMaxConns)
+	if err != nil {
+		return err
+	}
+	defer readerPool.Close()
+
 	ingestSvc := ingest.NewService(pool)
-	server := httpapi.NewServer(ingestSvc, pool)
+	server := httpapi.NewServer(ingestSvc, pool, readerPool)
 	httpServer := server.NewHTTPServer(cfg.ListenAddr)
 
 	stopCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
