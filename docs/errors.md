@@ -27,10 +27,12 @@ change the outcome.
 | `invalid_property_type` | — (per-event, inside 200) | permanent | A property value is an array, object, or otherwise not string/number/boolean/null. |
 | `property_too_large` | — (per-event, inside 200) | permanent | A string property value exceeds 1024 UTF-8 bytes. |
 | `properties_too_large` | — (per-event, inside 200) | permanent | The event's encoded properties exceed 8 KiB total. |
+| `unknown_event` | — (per-event, inside 200) | permanent | A product event name isn't in the project's event catalog and the project has `strict_catalog` enabled (section 7). In non-strict projects, unknown product events are stored and auto-added to the catalog instead of rejected. |
 | `install_conflict` | 409 | permanent | `install_id` is already registered with a different credential — the client must generate a new ID/credential pair (section 5.2/5.3). |
 | `unauthorized` | 401 | permanent | Bearer credential missing, malformed, or doesn't match the installation. |
 | `rate_limited` | 429 | retryable | A rate limit was hit (section 6). Response includes `Retry-After`. |
 | `server_storage_pressure` | 503 | retryable | Server is in the Rejecting disk-pressure state (section 12). Response includes `Retry-After`. |
+| `internal_error` | 500 | retryable | Unclassified server-side failure. Never includes SQL or stack trace details (section 5.1). |
 
 Per-event codes (`invalid_event_name`, `reserved_event_name`,
 `too_many_properties`, `invalid_property_key`, `invalid_property_type`,
