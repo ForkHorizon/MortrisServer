@@ -256,6 +256,149 @@ components:
               day: { type: string, format: date }
               count: { type: integer }
 
+    FunnelResult:
+      type: object
+      required: [steps, completion_window_seconds, truncated]
+      properties:
+        completion_window_seconds: { type: integer }
+        truncated: { type: boolean, description: "true if the safety-valve event cap (500,000 rows) was hit — see internal/analytics/funnel.go." }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [name, count, conversion_from_first, conversion_from_previous]
+            properties:
+              name: { type: string }
+              count: { type: integer }
+              conversion_from_first: { type: number }
+              conversion_from_previous: { type: number }
+
+    RetentionResult:
+      type: object
+      required: [cohorts]
+      properties:
+        cohorts:
+          type: array
+          items:
+            type: object
+            required: [cohort_day, cohort_size, d1, d7, d30]
+            properties:
+              cohort_day: { type: string, format: date }
+              cohort_size: { type: integer }
+              d1: { type: integer }
+              d7: { type: integer }
+              d30: { type: integer }
+
+    TimelineResult:
+      type: object
+      required: [install_id, registered_at, events, truncated]
+      properties:
+        install_id: { type: string, format: uuid }
+        registered_at: { type: string, format: date-time }
+        activated_at: { type: string, format: date-time }
+        truncated: { type: boolean, description: "true if more than 500 events exist; only the most recent 500 are returned." }
+        events:
+          type: array
+          items:
+            type: object
+            required: [event_id, name, event_kind, effective_at, time_quality, properties]
+            properties:
+              event_id: { type: string, format: uuid }
+              name: { type: string }
+              event_kind: { type: string, enum: [product, system] }
+              effective_at: { type: string, format: date-time }
+              time_quality: { type: string, enum: [client, batch_adjusted, untrusted] }
+              properties: { type: object }
+
+    CatalogResult:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            required: [name, kind, description, owner, first_schema_version, properties, known]
+            properties:
+              name: { type: string }
+              kind: { type: string, enum: [product, system] }
+              description: { type: string }
+              owner: { type: string }
+              first_schema_version: { type: integer }
+              properties: { type: array, items: { type: object } }
+              known: { type: boolean, description: "false for auto-discovered events (empty description) — see section 7." }
+              first_seen_at: { type: string, format: date-time }
+              last_seen_at: { type: string, format: date-time }
+
+    SystemHealth:
+      type: object
+      required:
+        - version, db_latency_ms, writer_pool, reader_pool, disk_state,
+          ingestion_accepted_last_hour, ingestion_rejected_last_hour,
+          enabled_policy_rules, last_maintenance_runs
+      properties:
+        version: { type: string }
+        db_latency_ms: { type: number }
+        disk_state: { type: string, enum: [normal, warning, high, critical, rejecting] }
+        ingestion_accepted_last_hour: { type: integer }
+        ingestion_rejected_last_hour: { type: integer }
+        enabled_policy_rules: { type: integer }
+        writer_pool: { $ref: "#/components/schemas/PoolStats" }
+        reader_pool: { $ref: "#/components/schemas/PoolStats" }
+        last_maintenance_runs:
+          type: array
+          items:
+            type: object
+            required: [kind, started_at, rows_affected]
+            properties:
+              kind: { type: string }
+              started_at: { type: string, format: date-time }
+              finished_at: { type: string, format: date-time }
+              rows_affected: { type: integer }
+              error: { type: string }
+
+    PoolStats:
+      type: object
+      required: [acquired_conns, idle_conns, total_conns, max_conns]
+      properties:
+        acquired_conns: { type: integer }
+        idle_conns: { type: integer }
+        total_conns: { type: integer }
+        max_conns: { type: integer }
+
+    PolicyRule:
+      type: object
+      required: [id, project_id, mode, next_check_seconds, discard_pending, reason, enabled, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        project_id: { type: string }
+        environment: { type: string }
+        app_version: { type: string }
+        build_number: { type: string }
+        sdk_version: { type: string }
+        mode: { type: string, enum: [active, pause_upload, disable_collection] }
+        next_check_seconds: { type: integer }
+        discard_pending: { type: boolean }
+        reason: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PolicyCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, mode, next_check_seconds, reason]
+      properties:
+        project_id: { type: string }
+        environment: { type: string }
+        app_version: { type: string }
+        build_number: { type: string }
+        sdk_version: { type: string }
+        mode: { type: string, enum: [active, pause_upload, disable_collection] }
+        next_check_seconds: { type: integer }
+        discard_pending: { type: boolean }
+        reason: { type: string, description: "Required — every kill-switch action is audited with its reason (section 5.5)." }
+
   parameters:
     Project:
       name: project
@@ -461,40 +604,145 @@ paths:
 
   /api/v1/analytics/funnel:
     get:
-      summary: Funnel conversion query (Phase S3)
+      summary: Funnel conversion query (section 10.2 #3)
       security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: steps
+          in: query
+          required: true
+          description: 2 to 5 comma-separated product event names, each must be in the project's catalog.
+          schema: { type: string }
+        - name: window_seconds
+          in: query
+          description: Completion window measured from the first step's occurrence. Defaults to 3600, max 86400.
+          schema: { type: integer }
       responses:
-        "200": { description: Specified in Phase S3. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FunnelResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/retention:
     get:
-      summary: D1/D7/D30 installation retention cohorts (Phase S3)
+      summary: D1/D7/D30 installation retention cohorts (section 10.2 #4)
       security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
       responses:
-        "200": { description: Specified in Phase S3. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetentionResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/installations/{id}:
     get:
-      summary: Single installation event timeline, admin-only (Phase S3)
+      summary: Single installation event timeline, admin-only (section 10.2 #5)
       security: [{ dashboardSession: [] }]
       parameters:
         - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Project"
       responses:
-        "200": { description: Specified in Phase S3. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimelineResult" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403":
+          description: Not admin role, or not scoped to this project.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404": { $ref: "#/components/responses/Error" }
 
   /api/v1/analytics/catalog:
     get:
-      summary: Event catalog definitions and validation status (Phase S3)
+      summary: Event catalog definitions and known/unknown status (section 10.2 #6)
       security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
       responses:
-        "200": { description: Specified in Phase S3. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogResult" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /api/v1/system:
     get:
-      summary: System health — build/API version, DB latency, ingestion rate, disk state (Phase S3)
+      summary: System health (section 10.2 #7)
+      description: DB/pool/disk state are cluster-wide; ingestion rate and policy-rule counts are scoped to the session's accessible projects.
       security: [{ dashboardSession: [] }]
       responses:
-        "200": { description: Specified in Phase S3. }
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemHealth" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /api/v1/policy:
+    get:
+      summary: List kill-switch policy rules for a project
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rules]
+                properties:
+                  rules: { type: array, items: { $ref: "#/components/schemas/PolicyRule" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create a kill-switch policy rule (admin-only)
+      security: [{ dashboardSession: [] }]
+      description: Requires the X-CSRF-Token header (double-submit, section 10.3). Every rule requires a reason — this is an audited action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PolicyCreateRequest" }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyRule" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/v1/policy/{id}:
+    delete:
+      summary: Remove a kill-switch policy rule (admin-only)
+      security: [{ dashboardSession: [] }]
+      description: Requires the X-CSRF-Token header (double-submit, section 10.3).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "204": { description: Rule removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }

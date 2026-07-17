@@ -22,3 +22,12 @@ func (s *Server) logRequest(r *http.Request, requestID string, status int, start
 	}
 	s.Log.Info("request", args...)
 }
+
+// fail renders err and logs the request in one call — every dashboard
+// handler below has several sequential steps that can each fail
+// (project access, param parsing, the query itself), and this is the
+// shared "bail out" for all of them.
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, requestID string, start time.Time, err error) {
+	status := writeError(w, s.Log, requestID, err)
+	s.logRequest(r, requestID, status, start, nil)
+}

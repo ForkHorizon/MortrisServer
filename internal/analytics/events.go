@@ -89,7 +89,10 @@ func GetEventExplorer(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	var result EventExplorerResult
+	// Trend starts as []DayCount{}, not nil — encoding/json emits null
+	// for a nil slice, which crashes a naive frontend list render
+	// whenever the filtered range has zero matching days.
+	result := EventExplorerResult{Trend: []DayCount{}}
 	if err := pool.QueryRow(ctx, `
 		SELECT COUNT(*), COUNT(DISTINCT install_id) FROM events
 		WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3

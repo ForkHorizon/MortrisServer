@@ -45,7 +45,7 @@ GRANT ALL ON SCHEMA public TO analytics_migrator;
 GRANT USAGE ON SCHEMA public TO analytics_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     projects, installations, events, event_catalog, client_policy_rules,
-    maintenance_runs, daily_registration_counters,
+    maintenance_runs, daily_registration_counters, ingestion_stats,
     admin_users, admin_user_projects, admin_sessions, admin_audit_log
     TO analytics_writer;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO analytics_writer;
@@ -53,9 +53,12 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO analytics_writer;
 -- analytics_reader: dashboard analytics queries only (section 10.1) — read
 -- only, statement timeout, no access to auth tables at all. A bug in
 -- query-building code can produce neither a write nor a credential leak.
+-- Includes maintenance_runs/ingestion_stats for the System Health screen
+-- (Phase S3) — still read-only, still no auth-table access.
 GRANT USAGE ON SCHEMA public TO analytics_reader;
 GRANT SELECT ON
-    projects, installations, events, event_catalog, client_policy_rules
+    projects, installations, events, event_catalog, client_policy_rules,
+    maintenance_runs, ingestion_stats
     TO analytics_reader;
 ALTER ROLE analytics_reader SET statement_timeout = '5s';
 

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"github.com/ForkHorizon/Mortris/internal/adminauth"
 	"github.com/ForkHorizon/Mortris/internal/apierr"
 	"github.com/ForkHorizon/Mortris/internal/contracts"
+	"github.com/ForkHorizon/Mortris/internal/diskstate"
 	"github.com/ForkHorizon/Mortris/internal/ingest"
 )
 
@@ -43,17 +45,22 @@ type Server struct {
 	Log           *slog.Logger
 	LoginThrottle *adminauth.Throttle
 
-	sem chan struct{}
+	sem                 chan struct{}
+	dashboardFS         fs.FS
+	dashboardFileServer http.Handler
 }
 
 func NewServer(ingestSvc *ingest.Service, pool, readerPool *pgxpool.Pool) *Server {
+	dfs := dashboardFS()
 	return &Server{
-		Ingest:        ingestSvc,
-		Pool:          pool,
-		ReaderPool:    readerPool,
-		Log:           slog.New(slog.NewJSONHandler(os.Stdout, nil)),
-		LoginThrottle: adminauth.NewThrottle(),
-		sem:           make(chan struct{}, ingestSemaphoreSize),
+		Ingest:              ingestSvc,
+		Pool:                pool,
+		ReaderPool:          readerPool,
+		Log:                 slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+		LoginThrottle:       adminauth.NewThrottle(),
+		sem:                 make(chan struct{}, ingestSemaphoreSize),
+		dashboardFS:         dfs,
+		dashboardFileServer: http.FileServer(http.FS(dfs)),
 	}
 }
 
@@ -71,8 +78,32 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/analytics/overview", s.requireSession(s.handleOverview))
 	mux.HandleFunc("GET /api/v1/analytics/events", s.requireSession(s.handleEventExplorer))
+	mux.HandleFunc("GET /api/v1/analytics/funnel", s.requireSession(s.handleFunnel))
+	mux.HandleFunc("GET /api/v1/analytics/retention", s.requireSession(s.handleRetention))
+	mux.HandleFunc("GET /api/v1/analytics/installations/{id}", s.requireSession(s.handleInstallationTimeline))
+	mux.HandleFunc("GET /api/v1/analytics/catalog", s.requireSession(s.handleCatalog))
+	mux.HandleFunc("GET /api/v1/system", s.requireSession(s.handleSystemHealth))
+
+	mux.HandleFunc("GET /api/v1/policy", s.requireSession(s.handlePolicyList))
+	mux.HandleFunc("POST /api/v1/policy", s.requireSession(s.handlePolicyCreate))
+	mux.HandleFunc("DELETE /api/v1/policy/{id}", s.requireSession(s.handlePolicyDelete))
+
+	// Catch-all: the embedded dashboard SPA (section 13.1). Lowest
+	// priority in ServeMux's pattern matching, so it never shadows any
+	// route above.
+	mux.HandleFunc("/", s.handleDashboard)
 
 	return mux
+}
+
+// currentDiskState reads the live disk-pressure state from the same
+// monitor internal/ingest gates batch ingestion on (section 12) — nil-safe
+// since CLI-only wiring paths never set it.
+func (s *Server) currentDiskState() diskstate.State {
+	if s.Ingest == nil || s.Ingest.Disk == nil {
+		return diskstate.Normal
+	}
+	return s.Ingest.Disk.Get()
 }
 
 // NewHTTPServer applies section 13.2's timeout requirements around Routes.

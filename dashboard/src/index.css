@@ -1,0 +1,253 @@
+:root {
+  --bg: #ffffff;
+  --bg-alt: #f5f6f8;
+  --text: #1a1d23;
+  --text-muted: #565d6b;
+  --border: #d7dae0;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --danger: #b3261e;
+  --focus: #2563eb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --bg-alt: #1d2025;
+    --text: #e7e9ec;
+    --text-muted: #a6adb8;
+    --border: #33373f;
+    --accent: #5b9bff;
+    --accent-text: #0a0c10;
+    --danger: #ff8983;
+    --focus: #5b9bff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Visible focus everywhere — never rely on color alone (section 10.2 accessibility). */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--accent);
+  color: var(--accent-text);
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+.site-header .brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.header-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.project-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.app-body {
+  display: flex;
+  min-height: calc(100vh - 56px);
+}
+
+nav[aria-label='Dashboard sections'] {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 1rem 0;
+}
+nav[aria-label='Dashboard sections'] ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+nav[aria-label='Dashboard sections'] a {
+  display: block;
+  padding: 0.6rem 1.25rem;
+  text-decoration: none;
+  color: var(--text);
+  border-left: 3px solid transparent;
+}
+nav[aria-label='Dashboard sections'] a:hover {
+  background: var(--bg-alt);
+}
+nav[aria-label='Dashboard sections'] a.active {
+  border-left-color: var(--accent);
+  background: var(--bg-alt);
+  font-weight: 600;
+}
+
+main {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  max-width: 1100px;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:hover {
+  filter: brightness(1.1);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.error-text,
+[role='alert'] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.stat-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  background: var(--bg-alt);
+}
+.stat-tile dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+.stat-tile dd {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background: var(--bg-alt);
+}
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.login-page form {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

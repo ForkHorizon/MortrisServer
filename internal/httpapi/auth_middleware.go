@@ -47,3 +47,14 @@ func requireProjectAccess(sess *adminauth.Session, r *http.Request) (string, err
 	}
 	return projectID, nil
 }
+
+// requireAdminRole gates the installation timeline (section 10.2 #5:
+// "admin-only") and policy administration (kill-switch) endpoints —
+// viewer sessions can read analytics but never see raw per-installation
+// event history or change collection policy.
+func requireAdminRole(sess *adminauth.Session) error {
+	if sess.Role != "admin" {
+		return apierr.New(403, adminauth.CodeForbiddenRole, "admin role required")
+	}
+	return nil
+}

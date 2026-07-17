@@ -39,17 +39,27 @@ internal/ingest/        Registration, batch ingestion, client policy
 internal/adminauth/     Dashboard operator auth: Argon2id, sessions,
                          CSRF, login throttling (section 10.3)
 internal/analytics/     Read-only metrics queries behind the dashboard
-                         (section 9, 10.1) — Overview, Event Explorer
+                         (section 9, 10.1) — all 7 screens' queries
+internal/policyadmin/   Kill-switch administration: create/list/delete
+                         client_policy_rules, audit-logged
 internal/httpapi/       net/http routing, body limits, JSON envelopes,
-                         error rendering for both the SDK and dashboard APIs
+                         error rendering for both the SDK and dashboard
+                         APIs, and serving the embedded dashboard SPA
 internal/ratelimit/     In-process token buckets (section 6)
 internal/diskstate/     Disk-pressure classification (section 12)
 internal/maintenance/   Retention + unactivated-installation cleanup,
                          disk-state monitor
 migrations/             Flat, numbered, idempotent SQL migrations
-deploy/                 Dockerfile, Compose stack, dev Caddyfile, DB roles
+deploy/                 Dockerfile (two-stage: frontend then Go), Compose
+                         stack, dev Caddyfile, DB roles
+dashboard/               React 19 + TypeScript + Vite dashboard SPA (all 7
+                         screens + login). `dashboard/embed.go` go:embeds
+                         its `dist/` build into the Go binary (section
+                         13.1) — `dist/` is gitignored except a tracked
+                         `.gitkeep`, so `go build` still works without
+                         Node; `make build`/CI run `npm run build` first.
 contracts/openapi.yaml  Authoritative OpenAPI 3.1 spec for /v1 (SDK) and
-                         /api/v1 (dashboard)
+                         /api/v1 (dashboard) — fully specified
 contracts/fixtures/     Valid/invalid request fixtures + manifest.json
                          driving contracts/fixtures_test.go
 events/catalog.yaml     Event catalog format + the v1 reserved system events
@@ -61,9 +71,12 @@ docs/threat-model.md    Threats and mitigations
 docs/data-inventory.md  What's stored, per table, and what's never collected
 ```
 
-Phases S3+ (funnel/retention/timeline/catalog/system screens, production
-hardening) are tracked and built incrementally — see the plan's section 14
-for exit gates per phase.
+All dashboard screens from the plan's section 10.2 are implemented: Overview,
+Event Explorer, Funnel, Installation Retention, Installation Timeline
+(admin-only), Event Catalog, System Health, plus kill-switch Policy
+administration. Phase S4 (production hardening: TLS/firewall/secrets,
+off-host backup, restore drill, load/soak tests) is what's left — see the
+plan's section 14 for exit gates per phase.
 
 ## Verify
 
@@ -87,6 +100,9 @@ bin/analytics-server serve
 
 ## Toolchain
 
-Go 1.26.x (pinned in `go.mod`), PostgreSQL 18.x, `pgx/v5`. Docker/Compose
+Go 1.26.x (pinned in `go.mod`), PostgreSQL 18.x, `pgx/v5`. Node 22+/npm is
+a build-time-only dependency for `dashboard/` (React 19, Vite 8,
+TypeScript, react-router-dom, Apache ECharts) — production never runs
+Node, only the compiled Go binary with the frontend embedded. Docker/Compose
 is optional — `deploy/compose.yaml` runs the full stack, but every
 subcommand also runs directly against any reachable PostgreSQL.
