@@ -44,3 +44,20 @@ because valid sibling events in the same batch still commit (section 5.4).
 Also retryable per section 5.4, independent of any code above: transport
 failures, `408`, any `5xx`, a malformed or truncated success response, and
 database unavailability during the request.
+
+## Dashboard API errors
+
+These use the same `ErrorResponse` shape but describe operator-auth
+failures (section 10.3), not SDK wire-contract violations —
+`internal/adminauth/errors.go` is their source of truth. "Retryable" here
+means "the operator can immediately retry," not "an SDK should queue and
+resend."
+
+| Code | HTTP status | Meaning |
+|---|---|---|
+| `invalid_credentials` | 401 | Login email/password didn't match. Deliberately identical whether the account doesn't exist, is disabled, or the password is wrong — never reveals which. |
+| `session_invalid` | 401 | Missing, unknown, or revoked session cookie. |
+| `session_expired` | 401 | Session hit its idle timeout (30 min) or absolute timeout (12h) (section 10.3). |
+| `csrf_mismatch` | 403 | The `X-CSRF-Token` header didn't match the `csrf_token` cookie, or either was missing, on a state-changing request. |
+| `forbidden_project` | 403 | The session isn't scoped to the requested `project` (section 10.3: "each scoped to explicit projects"). |
+| `too_many_attempts` | 429 | Login throttle hit (10/minute per email, 30/minute per source IP). |

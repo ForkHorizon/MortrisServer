@@ -5,6 +5,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/rand"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ForkHorizon/Mortris/internal/adminauth"
 	"github.com/ForkHorizon/Mortris/internal/apierr"
 	"github.com/ForkHorizon/Mortris/internal/contracts"
 	"github.com/ForkHorizon/Mortris/internal/ingest"
@@ -35,19 +37,23 @@ const (
 )
 
 type Server struct {
-	Ingest *ingest.Service
-	Pool   *pgxpool.Pool
-	Log    *slog.Logger
+	Ingest        *ingest.Service
+	Pool          *pgxpool.Pool // writer pool: SDK endpoints + admin auth (section 8.1)
+	ReaderPool    *pgxpool.Pool // dashboard analytics queries only (section 8.1, 10.1)
+	Log           *slog.Logger
+	LoginThrottle *adminauth.Throttle
 
 	sem chan struct{}
 }
 
-func NewServer(ingestSvc *ingest.Service, pool *pgxpool.Pool) *Server {
+func NewServer(ingestSvc *ingest.Service, pool, readerPool *pgxpool.Pool) *Server {
 	return &Server{
-		Ingest: ingestSvc,
-		Pool:   pool,
-		Log:    slog.New(slog.NewJSONHandler(os.Stdout, nil)),
-		sem:    make(chan struct{}, ingestSemaphoreSize),
+		Ingest:        ingestSvc,
+		Pool:          pool,
+		ReaderPool:    readerPool,
+		Log:           slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+		LoginThrottle: adminauth.NewThrottle(),
+		sem:           make(chan struct{}, ingestSemaphoreSize),
 	}
 }
 
@@ -58,6 +64,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/client/policy", s.handlePolicy)
 	mux.HandleFunc("GET /health/live", s.handleLive)
 	mux.HandleFunc("GET /health/ready", s.handleReady)
+
+	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.requireSession(s.handleLogout))
+	mux.HandleFunc("GET /api/v1/auth/session", s.requireSession(s.handleSessionInfo))
+
+	mux.HandleFunc("GET /api/v1/analytics/overview", s.requireSession(s.handleOverview))
+	mux.HandleFunc("GET /api/v1/analytics/events", s.requireSession(s.handleEventExplorer))
+
 	return mux
 }
 
@@ -114,6 +128,22 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 		return nil, errors.New("decompressed body exceeds limit")
 	}
 	return data, nil
+}
+
+// decodeJSONStrict is the dashboard-API equivalent of internal/contracts'
+// strict decoder — unknown fields rejected, exactly one JSON value. Kept
+// local since dashboard request bodies aren't part of the SDK wire
+// contract package.
+func decodeJSONStrict(data []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if dec.More() {
+		return errors.New("body must contain exactly one JSON value")
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
