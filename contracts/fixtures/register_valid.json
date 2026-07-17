@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "project_id": "puzzle-production",
+  "install_id": "09ffb634-1792-40cd-bd9e-0a89938ff411",
+  "installation_credential": "sQcTnyphzfOqoxX1BY51m4rZp-A1EMgvTrUgb18DhCU",
+  "sdk_name": "daliys-unity",
+  "sdk_version": "0.1.0",
+  "app_version": "1.4.0",
+  "build_number": "140",
+  "platform": "android"
+}

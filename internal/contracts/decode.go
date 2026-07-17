@@ -1,0 +1,104 @@
+package contracts
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
+
+// DecodeRegisterRequest strictly decodes a registration envelope. An
+// unknown top-level field rejects the whole request (section 5.1).
+func DecodeRegisterRequest(data []byte) (*RegisterRequest, error) {
+	var req RegisterRequest
+	if err := decodeStrict(data, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// DecodePolicyRequest strictly decodes a client-policy probe envelope.
+func DecodePolicyRequest(data []byte) (*PolicyRequest, error) {
+	var req PolicyRequest
+	if err := decodeStrict(data, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// batchEnvelope mirrors BatchIngestRequest but leaves each event as raw
+// JSON, so an unknown field inside one event rejects only that event
+// instead of the whole envelope (section 5.1).
+type batchEnvelope struct {
+	SchemaVersion int               `json:"schema_version"`
+	ProjectID     string            `json:"project_id"`
+	InstallID     string            `json:"install_id"`
+	SDK           SDKInfo           `json:"sdk"`
+	SentAtClient  string            `json:"sent_at_client"`
+	Events        []json.RawMessage `json:"events"`
+}
+
+// DecodeBatchIngestRequest strictly decodes the envelope, then decodes each
+// event independently. Events that fail to decode (unknown field or wrong
+// type) come back as rejections rather than failing the whole request —
+// their siblings can still be accepted (section 5.4).
+func DecodeBatchIngestRequest(data []byte) (*BatchIngestRequest, []RejectedEvent, error) {
+	var env batchEnvelope
+	if err := decodeStrict(data, &env); err != nil {
+		return nil, nil, err
+	}
+
+	req := &BatchIngestRequest{
+		SchemaVersion: env.SchemaVersion,
+		ProjectID:     env.ProjectID,
+		InstallID:     env.InstallID,
+		SDK:           env.SDK,
+		SentAtClient:  env.SentAtClient,
+	}
+
+	var rejected []RejectedEvent
+	for _, raw := range env.Events {
+		var e Event
+		if err := decodeStrict(raw, &e); err != nil {
+			rejected = append(rejected, RejectedEvent{
+				EventID: bestEffortEventID(raw),
+				Code:    decodeErrorCode(err),
+			})
+			continue
+		}
+		req.Events = append(req.Events, e)
+	}
+	return req, rejected, nil
+}
+
+func decodeStrict(data []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if dec.More() {
+		return &ValidationError{Code: CodeInvalidRequest, Message: "body must contain exactly one JSON value"}
+	}
+	return nil
+}
+
+// decodeErrorCode classifies a strict-decode failure into a stable code.
+// Good enough for contract tests; the HTTP layer built in Phase S1 can
+// refine this further if a case needs a more specific code.
+func decodeErrorCode(err error) string {
+	if strings.Contains(err.Error(), "unknown field") {
+		return CodeUnknownField
+	}
+	return CodeInvalidRequest
+}
+
+// bestEffortEventID recovers event_id from a raw event that otherwise
+// failed strict decoding, so the caller can still report which event was
+// rejected.
+func bestEffortEventID(raw json.RawMessage) string {
+	var probe struct {
+		EventID string `json:"event_id"`
+	}
+	_ = json.Unmarshal(raw, &probe)
+	return probe.EventID
+}

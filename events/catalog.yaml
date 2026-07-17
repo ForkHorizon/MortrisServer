@@ -1,0 +1,73 @@
+# Event catalog — the source of truth for every event name a project may
+# emit. See server_implementation_plan.md section 7.
+#
+# Format for each entry under `events`:
+#   name:                 the event name, matching ^[a-z][a-z0-9_]{0,63}$
+#   kind:                 system | product
+#   description:          what triggers this event
+#   owner:                team or person responsible for this event's schema
+#   first_schema_version: the schema_version this event was introduced in
+#   properties:            (optional) list of:
+#     name:               property key, matching ^[a-zA-Z0-9_]{1,64}$
+#     type:                string | number | boolean
+#     required:            true | false
+#     description:
+#
+# Unknown product events are handled per-project via `strict_catalog`
+# (projects table, section 8.2): rejected in strict mode, stored and
+# flagged in development mode. `sys_` names are never project-configurable
+# — only the three reserved system events below may use that prefix
+# (enforced in internal/contracts.ReservedSystemEvents).
+
+version: 1
+
+events:
+  - name: sys_session_start
+    kind: system
+    description: Emitted when the SDK opens a new session.
+    owner: sdk-core
+    first_schema_version: 1
+    properties: []
+
+  - name: sys_app_background
+    kind: system
+    description: >
+      Best-effort pause/background boundary. Used as the fallback bound
+      for observed session duration when no later product event arrives
+      in the session (section 9).
+    owner: sdk-core
+    first_schema_version: 1
+    properties: []
+
+  - name: sys_sdk_health
+    kind: system
+    description: >
+      Emitted at most once per session. Bounded counters only — must never
+      contain exception text, URLs, or event properties from Track calls.
+    owner: sdk-core
+    first_schema_version: 1
+    properties:
+      - name: handoff_drops
+        type: number
+        required: true
+        description: Events dropped during in-process handoff between capture and the upload queue.
+      - name: queue_evictions
+        type: number
+        required: true
+        description: Events evicted from the on-device queue under storage pressure.
+      - name: permanent_rejections
+        type: number
+        required: true
+        description: Events the server permanently rejected in a prior batch.
+      - name: corruption_resets
+        type: number
+        required: true
+        description: Times the local queue was reset due to detected corruption.
+      - name: retry_count
+        type: number
+        required: true
+        description: Upload retry attempts this session.
+      - name: last_upload_category
+        type: string
+        required: true
+        description: Outcome category of the most recent upload attempt (e.g. success, retryable, rejected).
