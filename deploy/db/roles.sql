@@ -1,4 +1,11 @@
--- Role bootstrap (section 8.1). Run once per cluster by a superuser:
+-- Role bootstrap (section 8.1). Run TWICE against a fresh database, by a
+-- superuser, with migrations/*.sql applied in between:
+--   1st pass (before migrations) creates the roles/passwords so
+--      analytics_migrator can run migrations/*.sql.
+--   2nd pass (after migrations) grants table privileges — the GRANT
+--      statements below fail on tables that don't exist yet, so this
+--      pass is required even though role creation itself doesn't need it.
+--
 --   psql -v migrator_password="$MORTRIS_MIGRATOR_PASSWORD" \
 --        -v writer_password="$MORTRIS_WRITER_PASSWORD" \
 --        -v reader_password="$MORTRIS_READER_PASSWORD" \
@@ -6,7 +13,8 @@
 --        -f deploy/db/roles.sql
 -- Passwords are never committed — they come from deployment secret storage
 -- (section 13.2) via the -v arguments above. Safe to re-run: role/grant
--- statements are guarded so a second run only rotates passwords.
+-- statements are guarded so a rerun only rotates passwords and re-applies
+-- (already-satisfied) grants.
 
 DO $$
 BEGIN

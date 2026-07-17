@@ -1,0 +1,8 @@
+[Unit]
+Description=Mortris weekly differential database backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/usr/bin/pgbackrest --stanza=mortris --type=diff backup

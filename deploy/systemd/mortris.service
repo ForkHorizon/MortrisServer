@@ -1,0 +1,17 @@
+[Unit]
+Description=Mortris analytics server
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=daliys
+WorkingDirectory=/opt/mortris
+EnvironmentFile=/etc/mortris/env
+ExecStart=/opt/mortris/bin/analytics-server serve
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

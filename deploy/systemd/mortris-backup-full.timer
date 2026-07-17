@@ -1,0 +1,10 @@
+[Unit]
+Description=Mortris monthly full database backup
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
