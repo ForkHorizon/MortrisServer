@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiGet } from '../api/client'
 import type { TimelineResult } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable } from '../components/DataTable'
 
@@ -9,8 +9,7 @@ export function InstallationTimelinePage() {
   const { currentProject } = useAuth()
   const [inputId, setInputId] = useState('')
   const [installId, setInstallId] = useState('')
-
-  const { data, error, loading } = useApiData<TimelineResult | null>(
+  const fetchTimeline = useCallback(
     () =>
       installId && currentProject
         ? apiGet<TimelineResult>(`/api/v1/analytics/installations/${encodeURIComponent(installId)}`, {
@@ -19,6 +18,8 @@ export function InstallationTimelinePage() {
         : Promise.resolve(null),
     [currentProject, installId],
   )
+
+  const { data, error, loading } = useApiData<TimelineResult | null>(fetchTimeline)
 
   if (!currentProject) return <p>Select a project to look up an installation.</p>
 

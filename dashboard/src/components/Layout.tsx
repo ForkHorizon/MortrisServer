@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true, adminOnly: false },

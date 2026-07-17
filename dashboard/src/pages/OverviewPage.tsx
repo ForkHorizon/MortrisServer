@@ -1,6 +1,7 @@
+import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { Overview } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
@@ -9,11 +10,13 @@ import { StatGrid, StatTile } from '../components/StatTile'
 export function OverviewPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
-
-  const { data, error, loading } = useApiData<Overview>(
-    () => apiGet<Overview>('/api/v1/analytics/overview', { project: currentProject, ...range.params }),
-    [currentProject, range.params.from, range.params.to, range.params.timezone],
+  const { from, to, timezone } = range.params
+  const fetchOverview = useCallback(
+    () => apiGet<Overview>('/api/v1/analytics/overview', { project: currentProject, from, to, timezone }),
+    [currentProject, from, to, timezone],
   )
+
+  const { data, error, loading } = useApiData<Overview>(fetchOverview)
 
   if (!currentProject) return <p>Select a project to view its overview.</p>
 

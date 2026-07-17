@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { apiGet } from '../api/client'
 import type { FunnelResult } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
@@ -12,14 +12,17 @@ export function FunnelPage() {
   const range = useDateRange()
   const [stepsInput, setStepsInput] = useState('level_start, level_end')
   const [windowSeconds, setWindowSeconds] = useState(3600)
-  const steps = stepsInput
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
+  const steps = useMemo(
+    () =>
+      stepsInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [stepsInput],
+  )
 
   const canQuery = currentProject && steps.length >= 2 && steps.length <= 5
-
-  const { data, error, loading } = useApiData<FunnelResult>(
+  const fetchFunnel = useCallback(
     () =>
       canQuery
         ? apiGet<FunnelResult>('/api/v1/analytics/funnel', {
@@ -30,8 +33,10 @@ export function FunnelPage() {
             window_seconds: windowSeconds,
           })
         : Promise.reject(new Error('not ready')),
-    [currentProject, range.params.from, range.params.to, stepsInput, windowSeconds],
+    [canQuery, currentProject, range.params.from, range.params.to, steps, windowSeconds],
   )
+
+  const { data, error, loading } = useApiData<FunnelResult>(fetchFunnel)
 
   if (!currentProject) return <p>Select a project to build a funnel.</p>
 

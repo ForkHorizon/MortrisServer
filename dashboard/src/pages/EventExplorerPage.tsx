@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiGet } from '../api/client'
 import type { EventExplorerResult } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
@@ -12,23 +12,27 @@ import { DataTable } from '../components/DataTable'
 export function EventExplorerPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
+  const { from, to, timezone } = range.params
   const [name, setName] = useState('')
   const [appVersion, setAppVersion] = useState('')
   const [buildNumber, setBuildNumber] = useState('')
   const [platform, setPlatform] = useState('')
-
-  const { data, error, loading } = useApiData<EventExplorerResult>(
+  const fetchEvents = useCallback(
     () =>
       apiGet<EventExplorerResult>('/api/v1/analytics/events', {
         project: currentProject,
-        ...range.params,
+        from,
+        to,
+        timezone,
         name: name || undefined,
         app_version: appVersion || undefined,
         build_number: buildNumber || undefined,
         platform: platform || undefined,
       }),
-    [currentProject, range.params.from, range.params.to, range.params.timezone, name, appVersion, buildNumber, platform],
+    [currentProject, from, to, timezone, name, appVersion, buildNumber, platform],
   )
+
+  const { data, error, loading } = useApiData<EventExplorerResult>(fetchEvents)
 
   if (!currentProject) return <p>Select a project to explore its events.</p>
 

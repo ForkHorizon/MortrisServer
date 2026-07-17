@@ -46,7 +46,7 @@ func credential() string {
 }
 
 type installation struct {
-	id  string
+	id   string
 	cred string
 }
 
