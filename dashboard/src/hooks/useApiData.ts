@@ -3,7 +3,7 @@ import { ApiError } from '../api/client'
 
 // Every screen below fetches on mount/param-change and needs the same
 // loading/error/data trio — shared here instead of repeated 7 times.
-export function useApiData<T>(fetcher: () => Promise<T>, deps: unknown[]) {
+export function useApiData<T>(fetcher: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -27,8 +27,7 @@ export function useApiData<T>(fetcher: () => Promise<T>, deps: unknown[]) {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [fetcher])
 
   return { data, error, loading }
 }

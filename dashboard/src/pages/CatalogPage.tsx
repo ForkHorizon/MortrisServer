@@ -1,16 +1,18 @@
+import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { CatalogResult } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable } from '../components/DataTable'
 
 export function CatalogPage() {
   const { currentProject } = useAuth()
-
-  const { data, error, loading } = useApiData<CatalogResult>(
+  const fetchCatalog = useCallback(
     () => apiGet<CatalogResult>('/api/v1/analytics/catalog', { project: currentProject }),
     [currentProject],
   )
+
+  const { data, error, loading } = useApiData<CatalogResult>(fetchCatalog)
 
   if (!currentProject) return <p>Select a project to view its event catalog.</p>
 

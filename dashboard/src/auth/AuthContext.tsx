@@ -1,18 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiGet, apiPost, ApiError } from '../api/client'
 import type { SessionInfo } from '../api/types'
-
-interface AuthState {
-  session: SessionInfo | null
-  loading: boolean
-  currentProject: string
-  setCurrentProject: (id: string) => void
-  login: (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthState | null>(null)
+import { AuthContext } from './context'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -67,10 +57,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthState {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
 }

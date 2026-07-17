@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { SystemHealth } from '../api/types'
 import { useApiData } from '../hooks/useApiData'
@@ -13,7 +14,8 @@ const DISK_STATE_LABEL: Record<SystemHealth['disk_state'], string> = {
 }
 
 export function SystemHealthPage() {
-  const { data, error, loading } = useApiData<SystemHealth>(() => apiGet<SystemHealth>('/api/v1/system'), [])
+  const fetchSystemHealth = useCallback(() => apiGet<SystemHealth>('/api/v1/system'), [])
+  const { data, error, loading } = useApiData<SystemHealth>(fetchSystemHealth)
 
   return (
     <section aria-labelledby="system-heading">

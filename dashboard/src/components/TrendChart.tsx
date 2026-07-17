@@ -1,5 +1,12 @@
 import { useEffect, useRef } from 'react'
-import * as echarts from 'echarts'
+import { init, use } from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+const registerEChartsComponents = use
+
+registerEChartsComponents([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 export interface TrendPoint {
   day: string
@@ -15,7 +22,7 @@ export function TrendChart({ data, label }: { data: TrendPoint[]; label: string 
 
   useEffect(() => {
     if (!ref.current) return
-    const chart = echarts.init(ref.current)
+    const chart = init(ref.current)
     chart.setOption({
       grid: { left: 48, right: 16, top: 24, bottom: 32 },
       xAxis: { type: 'category', data: data.map((d) => d.day) },

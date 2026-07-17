@@ -1,16 +1,28 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import { RequireAuth, RequireAdmin } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
-import { OverviewPage } from './pages/OverviewPage'
-import { EventExplorerPage } from './pages/EventExplorerPage'
-import { FunnelPage } from './pages/FunnelPage'
-import { RetentionPage } from './pages/RetentionPage'
-import { InstallationTimelinePage } from './pages/InstallationTimelinePage'
-import { CatalogPage } from './pages/CatalogPage'
-import { SystemHealthPage } from './pages/SystemHealthPage'
-import { PolicyAdminPage } from './pages/PolicyAdminPage'
+
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
+const EventExplorerPage = lazy(() =>
+  import('./pages/EventExplorerPage').then((m) => ({ default: m.EventExplorerPage })),
+)
+const FunnelPage = lazy(() => import('./pages/FunnelPage').then((m) => ({ default: m.FunnelPage })))
+const RetentionPage = lazy(() => import('./pages/RetentionPage').then((m) => ({ default: m.RetentionPage })))
+const InstallationTimelinePage = lazy(() =>
+  import('./pages/InstallationTimelinePage').then((m) => ({ default: m.InstallationTimelinePage })),
+)
+const CatalogPage = lazy(() => import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })))
+const SystemHealthPage = lazy(() =>
+  import('./pages/SystemHealthPage').then((m) => ({ default: m.SystemHealthPage })),
+)
+const PolicyAdminPage = lazy(() => import('./pages/PolicyAdminPage').then((m) => ({ default: m.PolicyAdminPage })))
+
+function RouteFallback() {
+  return <p role="status">Loading…</p>
+}
 
 export default function App() {
   return (
@@ -23,7 +35,9 @@ export default function App() {
               path="/"
               element={
                 <RequireAuth>
-                  <OverviewPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <OverviewPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -31,7 +45,9 @@ export default function App() {
               path="/events"
               element={
                 <RequireAuth>
-                  <EventExplorerPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <EventExplorerPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -39,7 +55,9 @@ export default function App() {
               path="/funnel"
               element={
                 <RequireAuth>
-                  <FunnelPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <FunnelPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -47,7 +65,9 @@ export default function App() {
               path="/retention"
               element={
                 <RequireAuth>
-                  <RetentionPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <RetentionPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -55,7 +75,9 @@ export default function App() {
               path="/installations"
               element={
                 <RequireAdmin>
-                  <InstallationTimelinePage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <InstallationTimelinePage />
+                  </Suspense>
                 </RequireAdmin>
               }
             />
@@ -63,7 +85,9 @@ export default function App() {
               path="/catalog"
               element={
                 <RequireAuth>
-                  <CatalogPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <CatalogPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -71,7 +95,9 @@ export default function App() {
               path="/system"
               element={
                 <RequireAuth>
-                  <SystemHealthPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <SystemHealthPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />
@@ -79,7 +105,9 @@ export default function App() {
               path="/policy"
               element={
                 <RequireAuth>
-                  <PolicyAdminPage />
+                  <Suspense fallback={<RouteFallback />}>
+                    <PolicyAdminPage />
+                  </Suspense>
                 </RequireAuth>
               }
             />

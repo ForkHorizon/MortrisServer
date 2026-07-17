@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiGet, apiPost, apiDelete, ApiError } from '../api/client'
 import type { PolicyRule } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable } from '../components/DataTable'
 
@@ -21,11 +21,15 @@ export function PolicyAdminPage() {
   const [appVersion, setAppVersion] = useState('')
   const [buildNumber, setBuildNumber] = useState('')
   const [sdkVersion, setSdkVersion] = useState('')
-
-  const { data, error, loading } = useApiData<{ rules: PolicyRule[] }>(
-    () => apiGet<{ rules: PolicyRule[] }>('/api/v1/policy', { project: currentProject }),
+  const fetchPolicyRules = useCallback(
+    () => {
+      void refreshKey
+      return apiGet<{ rules: PolicyRule[] }>('/api/v1/policy', { project: currentProject })
+    },
     [currentProject, refreshKey],
   )
+
+  const { data, error, loading } = useApiData<{ rules: PolicyRule[] }>(fetchPolicyRules)
 
   if (!currentProject) return <p>Select a project to administer its kill switch.</p>
 

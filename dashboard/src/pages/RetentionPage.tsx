@@ -1,6 +1,7 @@
+import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { RetentionResult } from '../api/types'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
@@ -14,11 +15,13 @@ function pct(retained: number, cohort: number): string {
 export function RetentionPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
-
-  const { data, error, loading } = useApiData<RetentionResult>(
-    () => apiGet<RetentionResult>('/api/v1/analytics/retention', { project: currentProject, ...range.params }),
-    [currentProject, range.params.from, range.params.to, range.params.timezone],
+  const { from, to, timezone } = range.params
+  const fetchRetention = useCallback(
+    () => apiGet<RetentionResult>('/api/v1/analytics/retention', { project: currentProject, from, to, timezone }),
+    [currentProject, from, to, timezone],
   )
+
+  const { data, error, loading } = useApiData<RetentionResult>(fetchRetention)
 
   if (!currentProject) return <p>Select a project to view retention.</p>
 
