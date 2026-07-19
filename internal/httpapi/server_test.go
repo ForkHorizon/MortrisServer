@@ -82,12 +82,66 @@ func TestRoutesBatchRejectsInvalidGzip(t *testing.T) {
 	srv := NewServer(nil, nil, nil)
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/batch", strings.NewReader("not-gzip"))
 	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRoutesBatchRequiresGzip(t *testing.T) {
+	srv := NewServer(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/batch", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRoutesBatchRejectsOversizedPayload(t *testing.T) {
+	var compressed bytes.Buffer
+	gz := gzip.NewWriter(&compressed)
+	if _, err := gz.Write(bytes.Repeat([]byte("a"), maxDecompressedBody+1)); err != nil {
+		t.Fatalf("write gzip payload: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip writer: %v", err)
+	}
+
+	srv := NewServer(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/batch", bytes.NewReader(compressed.Bytes()))
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+	var response contracts.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal error body: %v", err)
+	}
+	if response.Code != contracts.CodePayloadTooLarge {
+		t.Fatalf("code = %q, want %q", response.Code, contracts.CodePayloadTooLarge)
+	}
+}
+
+func TestReadBodyRejectsOversizedCompressedPayload(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/batch", bytes.NewReader(bytes.Repeat([]byte("x"), maxCompressedBody+1)))
+	req.Header.Set("Content-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+
+	_, err := readBody(rec, req)
+	if err != errBodyTooLarge {
+		t.Fatalf("err = %v, want %v", err, errBodyTooLarge)
 	}
 }
 
@@ -106,8 +160,8 @@ func TestReadBodyRejectsOversizedDecompressedPayload(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	_, err := readBody(rec, req)
-	if err == nil || !strings.Contains(err.Error(), "decompressed body exceeds limit") {
-		t.Fatalf("err = %v, want decompressed body exceeds limit", err)
+	if err != errBodyTooLarge {
+		t.Fatalf("err = %v, want %v", err, errBodyTooLarge)
 	}
 }
 

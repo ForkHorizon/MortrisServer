@@ -1,13 +1,11 @@
-# Local dev only — no real domain/TLS here (that's Phase S4's production
-# Caddyfile, kept alongside the runbook once there's a real host to point
-# it at). This still exercises the section 13.2 shape: Caddy is the only
-# service with a published port, and it enforces a body-size ceiling in
-# front of Go's own limit.
+# Local dev only. Caddy issues an internal certificate so the smoke test
+# exercises the same HTTPS shape as production without a public DNS name.
 {
 	admin off
 }
 
-:8080 {
+https://localhost:8443 {
+	tls internal
 	request_body {
 		max_size 256KB
 	}

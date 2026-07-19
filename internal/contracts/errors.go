@@ -23,6 +23,7 @@ const (
 	CodePropertiesTooLarge      = "properties_too_large"
 	CodeUnauthorized            = "unauthorized"
 	CodeRateLimited             = "rate_limited"
+	CodePayloadTooLarge         = "payload_too_large"
 	CodeServerStoragePressure   = "server_storage_pressure"
 	CodeInternal                = "internal_error"
 )

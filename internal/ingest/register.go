@@ -84,7 +84,7 @@ func (s *Service) Register(ctx context.Context, req *contracts.RegisterRequest, 
 			// Rolling back releases the reserved counter slot for the
 			// next attempt today (section 6: "raise it before a
 			// campaign", not silently reject forever).
-			return nil, apierr.New(429, contracts.CodeRateLimited, "project daily registration cap exceeded")
+			return nil, apierr.WithRetryAfter(429, contracts.CodeRateLimited, "project daily registration cap exceeded", time.Hour)
 		}
 
 		_, err = tx.Exec(ctx, `

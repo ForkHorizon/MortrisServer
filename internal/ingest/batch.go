@@ -167,6 +167,7 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 			return nil, err
 		}
 
+		var activated bool
 		var firstProductEffectiveAt *time.Time
 		for _, pe := range prepared {
 			propsJSON, err := json.Marshal(pe.event.Properties)
@@ -201,6 +202,7 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 				return nil, err
 			}
 			accepted = append(accepted, insertedID)
+			activated = true
 
 			if pe.kind == "product" {
 				if firstProductEffectiveAt == nil || pe.effectiveAt.Before(*firstProductEffectiveAt) {
@@ -221,13 +223,13 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 			}
 		}
 
-		if firstProductEffectiveAt != nil {
+		if activated {
 			if _, err := tx.Exec(ctx, `
 				UPDATE installations
 				SET activated_at = COALESCE(activated_at, clock_timestamp()),
 				    first_product_event_at = COALESCE(first_product_event_at, $3)
 				WHERE project_id = $1 AND install_id = $2
-			`, req.ProjectID, req.InstallID, *firstProductEffectiveAt); err != nil {
+			`, req.ProjectID, req.InstallID, firstProductEffectiveAt); err != nil {
 				return nil, err
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ForkHorizon/Mortris/internal/apierr"
 	"github.com/ForkHorizon/Mortris/internal/contracts"
 )
 
@@ -16,7 +17,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	data, err := readBody(w, r)
 	if err != nil {
-		status := writeError(w, s.Log, requestID, badRequest(err))
+		status := writeError(w, s.Log, requestID, bodyRequestErr(err))
 		s.logRequest(r, requestID, status, start, nil)
 		return
 	}
@@ -44,10 +45,20 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 
 	s.sem <- struct{}{}
 	defer func() { <-s.sem }()
+	if r.Header.Get("Content-Encoding") != "gzip" {
+		status := writeError(w, s.Log, requestID, apierr.New(http.StatusBadRequest, contracts.CodeInvalidRequest, "Content-Encoding must be gzip"))
+		s.logRequest(r, requestID, status, start, nil)
+		return
+	}
+	if r.Header.Get("Content-Type") != "application/json" {
+		status := writeError(w, s.Log, requestID, apierr.New(http.StatusBadRequest, contracts.CodeInvalidRequest, "Content-Type must be application/json"))
+		s.logRequest(r, requestID, status, start, nil)
+		return
+	}
 
 	data, err := readBody(w, r)
 	if err != nil {
-		status := writeError(w, s.Log, requestID, badRequest(err))
+		status := writeError(w, s.Log, requestID, bodyRequestErr(err))
 		s.logRequest(r, requestID, status, start, nil)
 		return
 	}
@@ -79,7 +90,7 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 	data, err := readBody(w, r)
 	if err != nil {
-		status := writeError(w, s.Log, requestID, badRequest(err))
+		status := writeError(w, s.Log, requestID, bodyRequestErr(err))
 		s.logRequest(r, requestID, status, start, nil)
 		return
 	}

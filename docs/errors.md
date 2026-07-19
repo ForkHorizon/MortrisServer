@@ -16,8 +16,8 @@ change the outcome.
 | `invalid_request` | 400 | permanent | Envelope fails a structural or business rule not covered by a more specific code below. |
 | `unknown_field` | 400 | permanent | An unrecognized field was present (envelope-level: whole request; event-level: that event only). |
 | `invalid_credential` | 400 | permanent | `installation_credential` is not 32 bytes of unpadded base64url. |
-| `invalid_uuid` | 400 | permanent | An ID field is not a canonical UUIDv4 string. |
-| `invalid_timestamp` | 400 | permanent | A timestamp field is not RFC 3339 UTC with millisecond precision. |
+| `invalid_uuid` | 400 or per-event inside `200` | permanent | An ID field is not a canonical UUIDv4 string. |
+| `invalid_timestamp` | 400 or per-event inside `200` | permanent | A timestamp field is not RFC 3339 UTC with millisecond precision. |
 | `invalid_batch_size` | 400 | permanent | `events` has fewer than 1 or more than 100 items. |
 | `duplicate_event_id_in_batch` | 400 | permanent | Two events in the same request share an `event_id` (section 5.4) — the whole request is rejected before any transaction opens; the client should split the retry, not resend as-is. |
 | `invalid_event_name` | — (per-event, inside 200) | permanent | Event `name` isn't lowercase snake_case within 64 characters. |
@@ -30,14 +30,15 @@ change the outcome.
 | `unknown_event` | — (per-event, inside 200) | permanent | A product event name isn't in the project's event catalog and the project has `strict_catalog` enabled (section 7). In non-strict projects, unknown product events are stored and auto-added to the catalog instead of rejected. |
 | `install_conflict` | 409 | permanent | `install_id` is already registered with a different credential — the client must generate a new ID/credential pair (section 5.2/5.3). |
 | `unauthorized` | 401 | permanent | Bearer credential missing, malformed, or doesn't match the installation. |
-| `rate_limited` | 429 | retryable | A rate limit was hit (section 6). Response includes `Retry-After`. |
+| `rate_limited` | 429 | retryable | A rate limit was hit (section 6). Response includes `Retry-After`, including the daily registration cap. |
+| `payload_too_large` | 413 | permanent for an impossible one-event body; otherwise retryable after the client halves its batch | The compressed body exceeded 256 KiB or the decompressed body exceeded 1 MiB. |
 | `server_storage_pressure` | 503 | retryable | Server is in the Rejecting disk-pressure state (section 12). Response includes `Retry-After`. |
 | `internal_error` | 500 | retryable | Unclassified server-side failure. Never includes SQL or stack trace details (section 5.1). |
 
-Per-event codes (`invalid_event_name`, `reserved_event_name`,
-`too_many_properties`, `invalid_property_key`, `invalid_property_type`,
-`property_too_large`, `properties_too_large`, and event-scoped
-`unknown_field`) never appear as the top-level HTTP error — they appear in
+Per-event codes (`invalid_uuid`, `invalid_timestamp`, `invalid_event_name`,
+`reserved_event_name`, `too_many_properties`, `invalid_property_key`,
+`invalid_property_type`, `property_too_large`, `properties_too_large`, and
+event-scoped `unknown_field`) never appear as the top-level HTTP error — they appear in
 `BatchIngestResponse.rejected[].code` inside an otherwise-200 response,
 because valid sibling events in the same batch still commit (section 5.4).
 

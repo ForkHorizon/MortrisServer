@@ -230,6 +230,9 @@ func checkBatch(t *testing.T, data []byte, wantValid bool, raw json.RawMessage) 
 // decodeErrorCode so the test can assert on it without exporting an
 // internal-only helper just for tests.
 func classifyDecodeError(err error) string {
+	if validationErr, ok := err.(*contracts.ValidationError); ok {
+		return validationErr.Code
+	}
 	if strings.Contains(err.Error(), "unknown field") {
 		return contracts.CodeUnknownField
 	}
