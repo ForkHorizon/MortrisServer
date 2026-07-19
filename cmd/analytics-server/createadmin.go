@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/term"
 
 	"github.com/ForkHorizon/Mortris/internal/adminauth"
@@ -19,30 +21,20 @@ import (
 // runCreateAdmin implements "CLI creates the first administrator"
 // (section 10.3) — there is no public account creation endpoint, this is
 // the only way an admin_users row is ever created.
+type createAdminOptions struct {
+	email, role, projects string
+	projectIDs            []string
+}
+
 func runCreateAdmin(ctx context.Context, cfg config.Config, args []string) error {
-	fs := flag.NewFlagSet("create-admin", flag.ExitOnError)
-	email := fs.String("email", "", "admin email (required)")
-	role := fs.String("role", "", "admin or viewer (required)")
-	projects := fs.String("projects", "", "comma-separated project IDs this account may access (required)")
-	if err := fs.Parse(args); err != nil {
+	opts, err := parseCreateAdminOptions(args)
+	if err != nil {
 		return err
 	}
-	if *email == "" || *role == "" || *projects == "" {
-		return fmt.Errorf("--email, --role, and --projects are all required")
-	}
-	if *role != "admin" && *role != "viewer" {
-		return fmt.Errorf("--role must be \"admin\" or \"viewer\"")
-	}
-	projectIDs := strings.Split(*projects, ",")
-	for i := range projectIDs {
-		projectIDs[i] = strings.TrimSpace(projectIDs[i])
-	}
-
 	password, err := readPasswordTwice()
 	if err != nil {
 		return err
 	}
-
 	if cfg.WriterDSN == "" {
 		return fmt.Errorf("MORTRIS_WRITER_DSN is required")
 	}
@@ -51,17 +43,38 @@ func runCreateAdmin(ctx context.Context, cfg config.Config, args []string) error
 		return err
 	}
 	defer pool.Close()
-
-	for _, id := range projectIDs {
-		var exists bool
-		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)`, id).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
-			return fmt.Errorf("project %q does not exist", id)
-		}
+	if err := createAdmin(ctx, pool, opts, password); err != nil {
+		return err
 	}
+	fmt.Printf("created %s admin user %s with access to: %s\n", opts.role, opts.email, strings.Join(opts.projectIDs, ", "))
+	return nil
+}
 
+func parseCreateAdminOptions(args []string) (createAdminOptions, error) {
+	fs := flag.NewFlagSet("create-admin", flag.ExitOnError)
+	email := fs.String("email", "", "admin email (required)")
+	role := fs.String("role", "", "admin or viewer (required)")
+	projects := fs.String("projects", "", "comma-separated project IDs this account may access (required)")
+	if err := fs.Parse(args); err != nil {
+		return createAdminOptions{}, err
+	}
+	if *email == "" || *role == "" || *projects == "" {
+		return createAdminOptions{}, fmt.Errorf("--email, --role, and --projects are all required")
+	}
+	if *role != "admin" && *role != "viewer" {
+		return createAdminOptions{}, fmt.Errorf("--role must be \"admin\" or \"viewer\"")
+	}
+	projectIDs := strings.Split(*projects, ",")
+	for i := range projectIDs {
+		projectIDs[i] = strings.TrimSpace(projectIDs[i])
+	}
+	return createAdminOptions{email: *email, role: *role, projects: *projects, projectIDs: projectIDs}, nil
+}
+
+func createAdmin(ctx context.Context, pool *pgxpool.Pool, opts createAdminOptions, password string) error {
+	if err := validateAdminProjects(ctx, pool, opts.projectIDs); err != nil {
+		return err
+	}
 	passwordHash, err := adminauth.HashPassword(password)
 	if err != nil {
 		return err
@@ -76,26 +89,46 @@ func runCreateAdmin(ctx context.Context, cfg config.Config, args []string) error
 	var adminUserID int64
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO admin_users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id
-	`, *email, passwordHash, *role).Scan(&adminUserID); err != nil {
+	`, opts.email, passwordHash, opts.role).Scan(&adminUserID); err != nil {
 		return fmt.Errorf("insert admin_users (email already exists?): %w", err)
 	}
+	if err := assignAdminProjects(ctx, tx, adminUserID, opts.projectIDs); err != nil {
+		return err
+	}
+	if err := auditAdminCreation(ctx, tx, adminUserID, opts); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func validateAdminProjects(ctx context.Context, pool *pgxpool.Pool, projectIDs []string) error {
+	for _, id := range projectIDs {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)`, id).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("project %q does not exist", id)
+		}
+	}
+	return nil
+}
+
+func assignAdminProjects(ctx context.Context, tx pgx.Tx, adminUserID int64, projectIDs []string) error {
 	for _, id := range projectIDs {
 		if _, err := tx.Exec(ctx, `INSERT INTO admin_user_projects (admin_user_id, project_id) VALUES ($1, $2)`, adminUserID, id); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `
+	return nil
+}
+
+func auditAdminCreation(ctx context.Context, tx pgx.Tx, adminUserID int64, opts createAdminOptions) error {
+	_, err := tx.Exec(ctx, `
 		INSERT INTO admin_audit_log (admin_user_id, action, detail)
 		VALUES ($1, 'admin_created', jsonb_build_object('email', $2::text, 'role', $3::text, 'projects', $4::text))
-	`, adminUserID, *email, *role, *projects); err != nil {
-		return err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-
-	fmt.Printf("created %s admin user %s with access to: %s\n", *role, *email, strings.Join(projectIDs, ", "))
-	return nil
+	`, adminUserID, opts.email, opts.role, opts.projects)
+	return err
 }
 
 func readPasswordTwice() (string, error) {
