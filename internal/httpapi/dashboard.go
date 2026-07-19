@@ -35,7 +35,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	clean := path.Clean(r.URL.Path)
 	if clean != "/" {
 		if f, err := s.dashboardFS.Open(clean[1:]); err == nil {
-			f.Close()
+			_ = f.Close()
 			s.dashboardFileServer.ServeHTTP(w, r)
 			s.logRequest(r, requestID, http.StatusOK, start, nil)
 			return

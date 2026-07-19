@@ -11,6 +11,17 @@ decision record. `Caddyfile` and `compose.yaml` in this directory are
 kept for **local dev only** (`docker compose -f deploy/compose.yaml up`)
 — they are not what's running in production.
 
+Run the complete local HTTPS contract smoke test with:
+
+```sh
+deploy/smoke-test.sh
+```
+
+It creates a disposable Compose volume, verifies registration retry, accepted
+and duplicate batch acknowledgement, partial rejection, and policy through
+Caddy's locally issued TLS certificate. Set `MORTRIS_SMOKE_KEEP=1` to retain
+the containers for inspection.
+
 ## Files
 
 - `nginx/mortris.conf` → `/etc/nginx/sites-available/mortris` (symlinked

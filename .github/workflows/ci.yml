@@ -19,5 +19,6 @@ jobs:
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
       - run: make lint
+      - run: make dashboard
       - run: make test
       - run: make build

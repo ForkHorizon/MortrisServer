@@ -76,6 +76,9 @@ type BatchIngestRequest struct {
 	SDK           SDKInfo `json:"sdk"`
 	SentAtClient  string  `json:"sent_at_client"`
 	Events        []Event `json:"events"`
+	// EventCount preserves the original envelope size while Events contains
+	// only successfully decoded entries. It is not part of the wire format.
+	EventCount int `json:"-"`
 }
 
 type RejectedEvent struct {

@@ -145,91 +145,13 @@ func checkRegister(t *testing.T, data []byte, wantValid bool, raw json.RawMessag
 	}
 }
 
-func checkBatch(t *testing.T, data []byte, wantValid bool, raw json.RawMessage) {
-	t.Helper()
-	req, decodeRejections, decodeErr := contracts.DecodeBatchIngestRequest(data)
-
-	if decodeErr != nil {
-		var exp expectation
-		if err := json.Unmarshal(raw, &exp); err != nil {
-			t.Fatalf("parse expect: %v", err)
-		}
-		if exp.Envelope != "invalid" {
-			t.Fatalf("envelope failed to decode but fixture expected %s: %v", raw, decodeErr)
-		}
-		if got := classifyDecodeError(decodeErr); got != exp.Code {
-			t.Errorf("expected error code %q, got %q", exp.Code, got)
-		}
-		return
-	}
-
-	envelopeErr := req.Validate()
-
-	if wantValid {
-		if envelopeErr != nil {
-			t.Fatalf("expected valid envelope, got: %v", envelopeErr)
-		}
-		if len(decodeRejections) != 0 {
-			t.Fatalf("expected no per-event decode rejections, got: %+v", decodeRejections)
-		}
-		for i, e := range req.Events {
-			if err := contracts.ValidateEvent(&e); err != nil {
-				t.Errorf("event %d expected valid, got: %v", i, err)
-			}
-		}
-		return
-	}
-
-	var exp expectation
-	if err := json.Unmarshal(raw, &exp); err != nil {
-		t.Fatalf("parse expect: %v", err)
-	}
-
-	if exp.Envelope == "invalid" {
-		if envelopeErr == nil {
-			t.Fatalf("expected envelope to be invalid with code %q, but it validated cleanly", exp.Code)
-		}
-		if got := envelopeErr.(*contracts.ValidationError).Code; got != exp.Code {
-			t.Errorf("expected error code %q, got %q", exp.Code, got)
-		}
-		return
-	}
-
-	if envelopeErr != nil {
-		t.Fatalf("expected envelope to be valid (only per-event rejections expected), got: %v", envelopeErr)
-	}
-	if len(decodeRejections) != 0 {
-		t.Fatalf("expected no per-event decode rejections, got: %+v", decodeRejections)
-	}
-	if len(exp.PerEvent) != len(req.Events) {
-		t.Fatalf("manifest lists %d per-event expectations but fixture has %d events", len(exp.PerEvent), len(req.Events))
-	}
-	for _, pe := range exp.PerEvent {
-		event := req.Events[pe.Index]
-		err := contracts.ValidateEvent(&event)
-		switch pe.Result {
-		case "valid":
-			if err != nil {
-				t.Errorf("event %d expected valid, got: %v", pe.Index, err)
-			}
-		case "invalid":
-			if err == nil {
-				t.Errorf("event %d expected invalid with code %q, but validated cleanly", pe.Index, pe.Code)
-				continue
-			}
-			if got := err.(*contracts.ValidationError).Code; got != pe.Code {
-				t.Errorf("event %d: expected error code %q, got %q", pe.Index, pe.Code, got)
-			}
-		default:
-			t.Fatalf("unknown perEvent result %q", pe.Result)
-		}
-	}
-}
-
 // classifyDecodeError mirrors internal/contracts' unexported
 // decodeErrorCode so the test can assert on it without exporting an
 // internal-only helper just for tests.
 func classifyDecodeError(err error) string {
+	if validationErr, ok := err.(*contracts.ValidationError); ok {
+		return validationErr.Code
+	}
 	if strings.Contains(err.Error(), "unknown field") {
 		return contracts.CodeUnknownField
 	}

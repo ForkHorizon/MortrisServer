@@ -3,7 +3,11 @@ package contracts
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 // DecodeRegisterRequest strictly decodes a registration envelope. An
@@ -43,7 +47,9 @@ type batchEnvelope struct {
 // their siblings can still be accepted (section 5.4).
 func DecodeBatchIngestRequest(data []byte) (*BatchIngestRequest, []RejectedEvent, error) {
 	var env batchEnvelope
-	if err := decodeStrict(data, &env); err != nil {
+	// Decode only the envelope here. Each event is decoded below so a bad
+	// event (including duplicate JSON keys) cannot reject valid siblings.
+	if err := decodeBatchEnvelope(data, &env); err != nil {
 		return nil, nil, err
 	}
 
@@ -53,6 +59,19 @@ func DecodeBatchIngestRequest(data []byte) (*BatchIngestRequest, []RejectedEvent
 		InstallID:     env.InstallID,
 		SDK:           env.SDK,
 		SentAtClient:  env.SentAtClient,
+		EventCount:    len(env.Events),
+	}
+	if req.EventCount < minEventsPerBatch || req.EventCount > maxEventsPerBatch {
+		return nil, nil, invalid(CodeInvalidBatchSize, fmt.Sprintf("events must contain %d to %d items", minEventsPerBatch, maxEventsPerBatch))
+	}
+	seen := make(map[string]struct{}, req.EventCount)
+	for _, raw := range env.Events {
+		if eventID := bestEffortEventID(raw); eventID != "" {
+			if _, exists := seen[eventID]; exists {
+				return nil, nil, invalid(CodeDuplicateEventIDInBatch, "duplicate event_id within one request: "+eventID)
+			}
+			seen[eventID] = struct{}{}
+		}
 	}
 
 	var rejected []RejectedEvent
@@ -71,12 +90,35 @@ func DecodeBatchIngestRequest(data []byte) (*BatchIngestRequest, []RejectedEvent
 }
 
 func decodeStrict(data []byte, v any) error {
+	if !utf8.Valid(data) {
+		return &ValidationError{Code: CodeInvalidRequest, Message: "body must be valid UTF-8"}
+	}
+	if err := rejectDuplicateKeys(data, true); err != nil {
+		return err
+	}
+	return decodeJSON(data, v)
+}
+
+func decodeBatchEnvelope(data []byte, v any) error {
+	if !utf8.Valid(data) {
+		return &ValidationError{Code: CodeInvalidRequest, Message: "body must be valid UTF-8"}
+	}
+	// The envelope is strict, but event bodies stay opaque until their
+	// independent decode so malformed siblings become per-event rejections.
+	if err := rejectBatchEnvelopeDuplicateKeys(data); err != nil {
+		return err
+	}
+	return decodeJSON(data, v)
+}
+
+func decodeJSON(data []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return err
 	}
-	if dec.More() {
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return &ValidationError{Code: CodeInvalidRequest, Message: "body must contain exactly one JSON value"}
 	}
 	return nil
@@ -86,6 +128,10 @@ func decodeStrict(data []byte, v any) error {
 // Good enough for contract tests; the HTTP layer built in Phase S1 can
 // refine this further if a case needs a more specific code.
 func decodeErrorCode(err error) string {
+	var validationErr *ValidationError
+	if errors.As(err, &validationErr) {
+		return validationErr.Code
+	}
 	if strings.Contains(err.Error(), "unknown field") {
 		return CodeUnknownField
 	}

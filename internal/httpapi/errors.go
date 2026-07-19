@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/ForkHorizon/Mortris/internal/apierr"
@@ -9,6 +11,13 @@ import (
 
 func badRequest(err error) error {
 	return apierr.New(400, contracts.CodeInvalidRequest, err.Error())
+}
+
+func bodyRequestErr(err error) error {
+	if errors.Is(err, errBodyTooLarge) {
+		return apierr.New(http.StatusRequestEntityTooLarge, contracts.CodePayloadTooLarge, "request body exceeds size limit")
+	}
+	return badRequest(err)
 }
 
 // decodeErr classifies a strict JSON decode failure the same way

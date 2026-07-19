@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"unicode/utf8"
@@ -82,7 +83,11 @@ func (b *BatchIngestRequest) Validate() error {
 	if !isValidTimestamp(b.SentAtClient) {
 		return invalid(CodeInvalidTimestamp, "sent_at_client must be RFC 3339 UTC with millisecond precision")
 	}
-	if len(b.Events) < minEventsPerBatch || len(b.Events) > maxEventsPerBatch {
+	eventCount := b.EventCount
+	if eventCount == 0 {
+		eventCount = len(b.Events)
+	}
+	if eventCount < minEventsPerBatch || eventCount > maxEventsPerBatch {
 		return invalid(CodeInvalidBatchSize, fmt.Sprintf("events must contain %d to %d items", minEventsPerBatch, maxEventsPerBatch))
 	}
 	seen := make(map[string]bool, len(b.Events))
@@ -127,12 +132,10 @@ func validateProperties(props EventProperties) error {
 	if len(props) > maxProperties {
 		return invalid(CodeTooManyProperties, fmt.Sprintf("at most %d properties are allowed", maxProperties))
 	}
-	encodedBytes := 0
 	for key, value := range props {
 		if len(key) > maxPropertyKeyBytes {
 			return invalid(CodeInvalidPropertyKey, "property key exceeds 64 characters: "+key)
 		}
-		encodedBytes += len(key)
 		switch v := value.(type) {
 		case nil, bool, float64:
 			// finite number: encoding/json never produces Inf/NaN from
@@ -141,12 +144,12 @@ func validateProperties(props EventProperties) error {
 			if utf8.RuneCountInString(v) > 0 && len(v) > maxPropertyValueBytes {
 				return invalid(CodePropertyTooLarge, "property value exceeds 1024 UTF-8 bytes: "+key)
 			}
-			encodedBytes += len(v)
 		default:
 			return invalid(CodeInvalidPropertyType, "property values must be string, number, boolean, or null: "+key)
 		}
 	}
-	if encodedBytes > maxPropertiesBytes {
+	encoded, err := json.Marshal(props)
+	if err != nil || len(encoded) > maxPropertiesBytes {
 		return invalid(CodePropertiesTooLarge, "encoded properties exceed 8 KiB")
 	}
 	return nil

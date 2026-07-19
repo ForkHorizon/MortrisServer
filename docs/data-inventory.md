@@ -17,7 +17,7 @@ stored in plaintext — only its SHA-256 hash (`installations.credential_hash`).
 |---|---|---|
 | `project_id`, `install_id` | client-generated at first registration | Primary key. Never reissued for the same anonymous identity — see credential-loss rule (section 5.3). |
 | `credential_hash` | SHA-256 of client-generated credential | Plaintext credential never touches disk or logs. |
-| `registered_at`, `activated_at`, `first_product_event_at`, `last_seen_at` | server clock | `activated_at` is null until the first product event commits; unactivated rows are deleted after 7 days (section 5.2). |
+| `registered_at`, `activated_at`, `first_product_event_at`, `last_seen_at` | server clock | `activated_at` is null until the first valid event commits; `first_product_event_at` remains null until the first product event. Unactivated rows are deleted after 7 days (section 5.2). |
 | `last_app_version`, `last_build_number`, `last_sdk_version` | client-reported, self-attested | Not verified against a store listing — device is untrusted (section 2). |
 | `status` | server-derived | Not user/PII data. |
 

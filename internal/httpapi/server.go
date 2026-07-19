@@ -38,6 +38,8 @@ const (
 	ingestSemaphoreSize = 64
 )
 
+var errBodyTooLarge = errors.New("request body exceeds size limit")
+
 type Server struct {
 	Ingest        *ingest.Service
 	Pool          *pgxpool.Pool // writer pool: SDK endpoints + admin auth (section 8.1)
@@ -138,27 +140,39 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 // set. It does not trust Content-Length — the decompressed limit is
 // enforced by capping the reader, not by checking a header.
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	if r.ContentLength > maxCompressedBody {
+		return nil, errBodyTooLarge
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxCompressedBody)
 
 	if r.Header.Get("Content-Encoding") != "gzip" {
-		return io.ReadAll(r.Body)
+		data, err := io.ReadAll(r.Body)
+		return data, normalizeBodyError(err)
 	}
 
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
-		return nil, err
+		return nil, normalizeBodyError(err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	limited := io.LimitReader(gz, maxDecompressedBody+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, err
+		return nil, normalizeBodyError(err)
 	}
 	if len(data) > maxDecompressedBody {
-		return nil, errors.New("decompressed body exceeds limit")
+		return nil, errBodyTooLarge
 	}
 	return data, nil
+}
+
+func normalizeBodyError(err error) error {
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		return errBodyTooLarge
+	}
+	return err
 }
 
 // decodeJSONStrict is the dashboard-API equivalent of internal/contracts'
