@@ -71,7 +71,7 @@ func runCreateAdmin(ctx context.Context, cfg config.Config, args []string) error
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var adminUserID int64
 	if err := tx.QueryRow(ctx, `

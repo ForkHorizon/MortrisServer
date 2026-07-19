@@ -51,9 +51,9 @@ func runParityReport(ctx context.Context, cfg config.Config, args []string) erro
 	defer pool.Close()
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	defer w.Flush()
+	defer func() { _ = w.Flush() }()
 
-	fmt.Fprintf(w, "Parity report: project=%s from=%s to=%s\n", *project, fromT.Format(time.RFC3339), toT.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "Parity report: project=%s from=%s to=%s\n", *project, fromT.Format(time.RFC3339), toT.Format(time.RFC3339))
 
 	var distinctInstalls int64
 	if err := pool.QueryRow(ctx, `
@@ -62,10 +62,10 @@ func runParityReport(ctx context.Context, cfg config.Config, args []string) erro
 	`, *project, fromT, toT).Scan(&distinctInstalls); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "\nDistinct installations:\t%d\n", distinctInstalls)
+	_, _ = fmt.Fprintf(w, "\nDistinct installations:\t%d\n", distinctInstalls)
 
-	fmt.Fprintln(w, "\nEvent count by name / build_number / day:")
-	fmt.Fprintln(w, "name\tbuild_number\tday\tcount")
+	_, _ = fmt.Fprintln(w, "\nEvent count by name / build_number / day:")
+	_, _ = fmt.Fprintln(w, "name\tbuild_number\tday\tcount")
 	rows, err := pool.Query(ctx, `
 		SELECT name, build_number, (effective_at AT TIME ZONE 'UTC')::date AS day, COUNT(*)
 		FROM events
@@ -84,15 +84,15 @@ func runParityReport(ctx context.Context, cfg config.Config, args []string) erro
 			rows.Close()
 			return err
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", name, build, day.Format("2006-01-02"), count)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", name, build, day.Format("2006-01-02"), count)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(w, "\nTime-quality distribution:")
-	fmt.Fprintln(w, "time_quality\tcount")
+	_, _ = fmt.Fprintln(w, "\nTime-quality distribution:")
+	_, _ = fmt.Fprintln(w, "time_quality\tcount")
 	tqRows, err := pool.Query(ctx, `
 		SELECT time_quality, COUNT(*) FROM events
 		WHERE project_id = $1 AND effective_at >= $2 AND effective_at < $3
@@ -108,7 +108,7 @@ func runParityReport(ctx context.Context, cfg config.Config, args []string) erro
 			tqRows.Close()
 			return err
 		}
-		fmt.Fprintf(w, "%s\t%d\n", quality, count)
+		_, _ = fmt.Fprintf(w, "%s\t%d\n", quality, count)
 	}
 	tqRows.Close()
 	if err := tqRows.Err(); err != nil {
@@ -123,21 +123,21 @@ func runParityReport(ctx context.Context, cfg config.Config, args []string) erro
 	`, *project, fromT, toT).Scan(&acceptedSum, &dupSum, &rejSum); err != nil {
 		return err
 	}
-	fmt.Fprintln(w, "\nIngestion stats (by received_at, not effective_at):")
-	fmt.Fprintf(w, "accepted\t%d\nduplicates\t%d\nrejected\t%d\n", acceptedSum, dupSum, rejSum)
+	_, _ = fmt.Fprintln(w, "\nIngestion stats (by received_at, not effective_at):")
+	_, _ = fmt.Fprintf(w, "accepted\t%d\nduplicates\t%d\nrejected\t%d\n", acceptedSum, dupSum, rejSum)
 
 	anomalyCount, examples, err := sequenceAnomalies(ctx, pool, *project, fromT, toT)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "\nSequence anomalies (gap != 1): %d\n", anomalyCount)
+	_, _ = fmt.Fprintf(w, "\nSequence anomalies (gap != 1): %d\n", anomalyCount)
 	if len(examples) > 0 {
-		fmt.Fprintln(w, "install_id\tsession_id\tsequence\tgap")
+		_, _ = fmt.Fprintln(w, "install_id\tsession_id\tsequence\tgap")
 		for _, ex := range examples {
-			fmt.Fprintln(w, ex)
+			_, _ = fmt.Fprintln(w, ex)
 		}
 		if anomalyCount > int64(len(examples)) {
-			fmt.Fprintf(w, "... showing first %d of %d\n", len(examples), anomalyCount)
+			_, _ = fmt.Fprintf(w, "... showing first %d of %d\n", len(examples), anomalyCount)
 		}
 	}
 

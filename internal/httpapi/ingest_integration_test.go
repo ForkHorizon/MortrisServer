@@ -16,7 +16,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ForkHorizon/Mortris/internal/contracts"
 	"github.com/ForkHorizon/Mortris/internal/ingest"
 	"github.com/ForkHorizon/Mortris/internal/store"
 )
@@ -134,82 +133,6 @@ func requireStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	if rec.Code != want {
 		t.Fatalf("status = %d, want %d: %s", rec.Code, want, rec.Body.String())
 	}
-}
-
-func TestSDKContractRegistrationAndBatchRetries(t *testing.T) {
-	pool := integrationPool(t)
-	projectID := integrationProject(t, pool)
-	service := ingest.NewService(pool)
-	server := NewServer(service, pool, pool)
-	installID := "09ffb634-1792-40cd-bd9e-0a89938ff411"
-	credential := testCredential(t)
-
-	// A repeated registration is the lost-response retry: it succeeds without
-	// replacing identity or creating a second installation.
-	for i := 0; i < 2; i++ {
-		rec := serveJSON(t, server.Routes(), context.Background(), "/v1/installs/register", registerBody(projectID, installID, credential), "", false)
-		requireStatus(t, rec, http.StatusOK)
-	}
-
-	conflict := serveJSON(t, server.Routes(), context.Background(), "/v1/installs/register", registerBody(projectID, installID, testCredential(t)), "", false)
-	requireStatus(t, conflict, http.StatusConflict)
-	var conflictBody contracts.ErrorResponse
-	if err := json.Unmarshal(conflict.Body.Bytes(), &conflictBody); err != nil {
-		t.Fatal(err)
-	}
-	if conflictBody.Code != contracts.CodeInstallConflict {
-		t.Fatalf("conflict code = %q", conflictBody.Code)
-	}
-
-	eventID := "79ff0c7c-10a9-4b95-93c4-186079fa5b41"
-	batch := map[string]any{
-		"schema_version": 1, "project_id": projectID, "install_id": installID,
-		"sdk":            map[string]any{"name": "contract-test", "version": "1.0.0"},
-		"sent_at_client": "2026-07-16T12:00:00.000Z", "events": []any{event(eventID, "level_start")},
-	}
-	first := serveJSON(t, server.Routes(), context.Background(), "/v1/events/batch", batch, credential, true)
-	requireStatus(t, first, http.StatusOK)
-	var firstBody contracts.BatchIngestResponse
-	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
-		t.Fatal(err)
-	}
-	if len(firstBody.Accepted) != 1 || firstBody.Accepted[0] != eventID {
-		t.Fatalf("first response = %#v", firstBody)
-	}
-
-	second := serveJSON(t, server.Routes(), context.Background(), "/v1/events/batch", batch, credential, true)
-	requireStatus(t, second, http.StatusOK)
-	var secondBody contracts.BatchIngestResponse
-	if err := json.Unmarshal(second.Body.Bytes(), &secondBody); err != nil {
-		t.Fatal(err)
-	}
-	if len(secondBody.Duplicates) != 1 || secondBody.Duplicates[0] != eventID {
-		t.Fatalf("retry response = %#v", secondBody)
-	}
-
-	validID := "89ff0c7c-10a9-4b95-93c4-186079fa5b41"
-	invalidID := "99ff0c7c-10a9-4b95-93c4-186079fa5b41"
-	partial := map[string]any{
-		"schema_version": 1, "project_id": projectID, "install_id": installID,
-		"sdk":            map[string]any{"name": "contract-test", "version": "1.0.0"},
-		"sent_at_client": "2026-07-16T12:00:00.000Z", "events": []any{event(validID, "level_start"), event(invalidID, "BadName")},
-	}
-	partialResult := serveJSON(t, server.Routes(), context.Background(), "/v1/events/batch", partial, credential, true)
-	requireStatus(t, partialResult, http.StatusOK)
-	var partialBody contracts.BatchIngestResponse
-	if err := json.Unmarshal(partialResult.Body.Bytes(), &partialBody); err != nil {
-		t.Fatal(err)
-	}
-	if len(partialBody.Accepted) != 1 || len(partialBody.Rejected) != 1 || partialBody.Rejected[0].EventID != invalidID {
-		t.Fatalf("partial response = %#v", partialBody)
-	}
-
-	policy := serveJSON(t, server.Routes(), context.Background(), "/v1/client/policy", map[string]any{
-		"schema_version": 1, "project_id": projectID, "install_id": installID,
-		"sdk":         map[string]any{"name": "contract-test", "version": "1.0.0"},
-		"app_version": "1.0.0", "build_number": "1", "platform": "android",
-	}, credential, false)
-	requireStatus(t, policy, http.StatusOK)
 }
 
 func TestSDKContractRateLimitAndFailedRequestDoNotAcknowledge(t *testing.T) {

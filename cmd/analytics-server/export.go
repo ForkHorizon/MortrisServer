@@ -73,7 +73,7 @@ func runExportEvents(ctx context.Context, cfg config.Config, args []string) erro
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	rowCount, exportErr := exportEventsCSV(ctx, pool, *project, fromT, toT, f)
 
@@ -103,7 +103,7 @@ func exportEventsCSV(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := tx.Query(ctx, `
 		SELECT project_id, event_id, install_id, session_id, sequence, session_elapsed_ms,

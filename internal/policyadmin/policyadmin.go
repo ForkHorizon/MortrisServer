@@ -107,7 +107,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, adminUserID int64, in Creat
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var r Rule
 	err = tx.QueryRow(ctx, `
@@ -148,7 +148,7 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, adminUserID int64, projectI
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var mode string
 	err = tx.QueryRow(ctx, `

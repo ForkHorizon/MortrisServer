@@ -154,7 +154,7 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, normalizeBodyError(err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	limited := io.LimitReader(gz, maxDecompressedBody+1)
 	data, err := io.ReadAll(limited)
