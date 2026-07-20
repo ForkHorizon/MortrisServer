@@ -1,33 +1,23 @@
-# Staging SDK fault mode
+# SDK fault mode
 
-This mode exists only for exercising the Unity SDK's retry and policy paths.
-It must run as a separate staging deployment with its own database, hostname,
-and project. Do not point it at the production database or enable it for
-`mortris-prod`.
+The supported mode is a protected `test` project inside the central Mortris
+dashboard. Only the Owner can enable a scenario, and the ingestion path accepts
+it only when the request presents that project's one-time test token. Production
+projects cannot enable or use these controls.
 
-The checked-in deployment templates use `sdk-test.mortris.forkhorizon.com`,
-`/opt/mortris-sdk-test`, and the `mortris_sdk_test` database. Create the DNS
-record before running Certbot, then issue its certificate after nginx has the
-HTTP-only template enabled.
-
-The process refuses to start with test mode enabled unless all of these are
-true:
-
-- `MORTRIS_DEPLOYMENT=staging`
-- `MORTRIS_SDK_TEST_MODE=1`
-- `MORTRIS_SDK_TEST_PROJECT=mortris-sdk-test` (or another dedicated project)
-- `MORTRIS_SDK_TEST_TOKEN` contains at least 16 bytes
-
-Create the configured test project with `environment='staging'`,
-`strict_catalog=false`, and `enabled=true`. Register the Unity installation
-normally, then add both headers to the test request:
+Create the project from **Projects** with “Enable protected SDK test controls”
+checked and environment set to `test`. Save the displayed token immediately;
+the server stores only its SHA-256 hash. Select a scenario from the same Owner
+screen, then add these headers to the Unity test request:
 
 ```text
-X-Mortris-Test-Token: <staging token>
+X-Mortris-Test-Token: <central test-project token>
 X-Mortris-Test-Scenario: <scenario>
 ```
 
-The token and project must both match; otherwise the headers do nothing.
+The checked-in `deploy/staging/` templates support the old isolated test site
+only during migration. They are retired after the central test project passes
+the scenarios below.
 
 | Scenario | Endpoint | Expected behavior |
 |---|---|---|
