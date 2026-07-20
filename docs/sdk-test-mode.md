@@ -8,16 +8,15 @@ projects cannot enable or use these controls.
 Create the project from **Projects** with “Enable protected SDK test controls”
 checked and environment set to `test`. Save the displayed token immediately;
 the server stores only its SHA-256 hash. Select a scenario from the same Owner
-screen, then add these headers to the Unity test request:
+screen, then add this header to the Unity test request:
 
 ```text
 X-Mortris-Test-Token: <central test-project token>
-X-Mortris-Test-Scenario: <scenario>
 ```
 
-The checked-in `deploy/staging/` templates support the old isolated test site
-only during migration. They are retired after the central test project passes
-the scenarios below.
+The server reads the selected scenario from the protected central project. The
+old isolated `sdk-test` site has been retired; its checked-in templates remain
+only as historical deployment reference.
 
 | Scenario | Endpoint | Expected behavior |
 |---|---|---|

@@ -1,5 +1,6 @@
-// Package sdktest exposes deliberate fault scenarios only for a separately
-// configured staging project. It is never enabled by the production service.
+// Package sdktest defines deliberate fault scenarios. Production serves them
+// only through a protected central project; Controller supports the retired
+// isolated staging deployment during migration.
 package sdktest
 
 import (
@@ -11,6 +12,8 @@ import (
 )
 
 const (
+	// HeaderScenario is used only by the legacy Controller fallback. Central
+	// dashboard-controlled tests select their scenario server-side.
 	HeaderScenario = "X-Mortris-Test-Scenario"
 	HeaderToken    = "X-Mortris-Test-Token"
 
