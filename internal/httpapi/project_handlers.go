@@ -134,7 +134,7 @@ func (s *Server) handleProjectCreate(w http.ResponseWriter, r *http.Request, ses
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
 	`, project.ID, project.Environment, project.DisplayName, project.RetentionDays, project.StrictCatalog, project.SDKTestEnabled, sdkHash)
 	if err == nil {
-		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_created', jsonb_build_object('project_id',$2::text,'sdk_test',$3))`, sess.AdminUserID, project.ID, project.SDKTestEnabled)
+		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_created', jsonb_build_object('project_id',$2::text,'sdk_test',$3::boolean))`, sess.AdminUserID, project.ID, project.SDKTestEnabled)
 	}
 	if err == nil {
 		err = tx.Commit(r.Context())
@@ -416,7 +416,7 @@ func (s *Server) handleProjectMemberCreate(w http.ResponseWriter, r *http.Reques
 		ON CONFLICT (admin_user_id, project_id) DO UPDATE SET access_role = EXCLUDED.access_role
 	`, accountID, projectID, req.AccessRole)
 	if err == nil {
-		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_granted', jsonb_build_object('project_id',$2::text,'account_id',$3,'access_role',$4))`, sess.AdminUserID, projectID, accountID, req.AccessRole)
+		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_granted', jsonb_build_object('project_id',$2::text,'account_id',$3::text,'access_role',$4::text))`, sess.AdminUserID, projectID, accountID, req.AccessRole)
 	}
 	if err == nil {
 		err = tx.Commit(r.Context())
@@ -454,7 +454,7 @@ func (s *Server) handleProjectMemberDelete(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, requestID, start, apierr.New(404, contracts.CodeInvalidRequest, "project membership not found"))
 		return
 	}
-	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_revoked', jsonb_build_object('project_id',$2::text,'account_id',$3))`, sess.AdminUserID, projectID, accountID)
+	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_revoked', jsonb_build_object('project_id',$2::text,'account_id',$3::text))`, sess.AdminUserID, projectID, accountID)
 	w.WriteHeader(http.StatusNoContent)
 	s.logRequest(r, requestID, http.StatusNoContent, start, map[string]any{"project_id": projectID, "account_id": accountID})
 }
@@ -540,7 +540,7 @@ func (s *Server) handleProjectMemberUpdate(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_updated', jsonb_build_object('project_id',$2::text,'account_id',$3))`, sess.AdminUserID, projectID, accountID)
+	_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'project_member_updated', jsonb_build_object('project_id',$2::text,'account_id',$3::text))`, sess.AdminUserID, projectID, accountID)
 	if err == nil {
 		err = tx.Commit(r.Context())
 	}
@@ -619,7 +619,7 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request, ses
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	id, err := createNamedAccount(r.Context(), tx, req.Username, req.Password, req.Email)
 	if err == nil {
-		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'account_created', jsonb_build_object('account_id',$2))`, sess.AdminUserID, id)
+		_, err = tx.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'account_created', jsonb_build_object('account_id',$2::text))`, sess.AdminUserID, id)
 	}
 	if err == nil {
 		err = tx.Commit(r.Context())
@@ -680,7 +680,7 @@ func (s *Server) handleAccountUpdate(w http.ResponseWriter, r *http.Request, ses
 	if req.Password != nil || req.Disabled != nil && *req.Disabled {
 		_, _ = s.Pool.Exec(r.Context(), `UPDATE admin_sessions SET revoked_at = clock_timestamp() WHERE admin_user_id = $1 AND revoked_at IS NULL`, id)
 	}
-	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'account_updated', jsonb_build_object('account_id',$2))`, sess.AdminUserID, id)
+	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'account_updated', jsonb_build_object('account_id',$2::text))`, sess.AdminUserID, id)
 	w.WriteHeader(http.StatusNoContent)
 	s.logRequest(r, requestID, http.StatusNoContent, start, map[string]any{"account_id": id})
 }
@@ -717,7 +717,7 @@ func (s *Server) handleSDKTestControl(w http.ResponseWriter, r *http.Request, se
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'sdk_test_scenario_updated', jsonb_build_object('project_id',$2::text,'scenario',$3))`, sess.AdminUserID, projectID, req.Scenario)
+	_, _ = s.Pool.Exec(r.Context(), `INSERT INTO admin_audit_log (admin_user_id, action, detail) VALUES ($1, 'sdk_test_scenario_updated', jsonb_build_object('project_id',$2::text,'scenario',$3::text))`, sess.AdminUserID, projectID, req.Scenario)
 	writeJSON(w, http.StatusOK, map[string]any{"project_id": projectID, "scenario": req.Scenario})
 	s.logRequest(r, requestID, http.StatusOK, start, map[string]any{"project_id": projectID, "scenario": req.Scenario})
 }
