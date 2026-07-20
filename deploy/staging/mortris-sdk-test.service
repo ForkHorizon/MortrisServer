@@ -1,0 +1,17 @@
+[Unit]
+Description=Mortris SDK staging fault server
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=daliys
+WorkingDirectory=/opt/mortris-sdk-test
+EnvironmentFile=/etc/mortris-sdk-test/env
+ExecStart=/opt/mortris-sdk-test/bin/analytics-server serve
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,11 @@ It must run as a separate staging deployment with its own database, hostname,
 and project. Do not point it at the production database or enable it for
 `mortris-prod`.
 
+The checked-in deployment templates use `sdk-test.mortris.forkhorizon.com`,
+`/opt/mortris-sdk-test`, and the `mortris_sdk_test` database. Create the DNS
+record before running Certbot, then issue its certificate after nginx has the
+HTTP-only template enabled.
+
 The process refuses to start with test mode enabled unless all of these are
 true:
 
