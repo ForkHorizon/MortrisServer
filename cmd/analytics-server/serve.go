@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,8 +16,8 @@ import (
 )
 
 func runServe(ctx context.Context, cfg config.Config) error {
-	if cfg.WriterDSN == "" {
-		return fmt.Errorf("MORTRIS_WRITER_DSN is required")
+	if err := validateServeConfig(cfg); err != nil {
+		return err
 	}
 
 	pool, err := store.NewPool(ctx, cfg.WriterDSN, cfg.WriterMaxConns)
@@ -35,6 +34,9 @@ func runServe(ctx context.Context, cfg config.Config) error {
 
 	ingestSvc := ingest.NewService(pool)
 	server := httpapi.NewServer(ingestSvc, pool, readerPool)
+	if cfg.SDKTest.Enabled {
+		server.EnableSDKTest(cfg.SDKTest.ProjectID, cfg.SDKTest.Token)
+	}
 	httpServer := server.NewHTTPServer(cfg.ListenAddr)
 
 	stopCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)

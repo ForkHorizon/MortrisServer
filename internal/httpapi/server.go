@@ -27,6 +27,7 @@ import (
 	"github.com/ForkHorizon/Mortris/internal/contracts"
 	"github.com/ForkHorizon/Mortris/internal/diskstate"
 	"github.com/ForkHorizon/Mortris/internal/ingest"
+	"github.com/ForkHorizon/Mortris/internal/sdktest"
 )
 
 const (
@@ -46,10 +47,15 @@ type Server struct {
 	ReaderPool    *pgxpool.Pool // dashboard analytics queries only (section 8.1, 10.1)
 	Log           *slog.Logger
 	LoginThrottle *adminauth.Throttle
+	SDKTest       *sdktest.Controller
 
 	sem                 chan struct{}
 	dashboardFS         fs.FS
 	dashboardFileServer http.Handler
+}
+
+func (s *Server) EnableSDKTest(projectID, token string) {
+	s.SDKTest = sdktest.New(projectID, token)
 }
 
 func NewServer(ingestSvc *ingest.Service, pool, readerPool *pgxpool.Pool) *Server {

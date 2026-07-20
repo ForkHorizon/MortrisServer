@@ -5,6 +5,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -31,6 +32,17 @@ type Config struct {
 	// DiskPath is the filesystem whose free space is evaluated for the
 	// disk-pressure states in section 12.
 	DiskPath string
+
+	// SDKTest enables deliberate client fault simulation. It is accepted
+	// only by a dedicated staging deployment for one test project.
+	SDKTest SDKTestConfig
+}
+
+type SDKTestConfig struct {
+	Enabled    bool
+	Deployment string
+	ProjectID  string
+	Token      string
 }
 
 func Load() Config {
@@ -42,11 +54,33 @@ func Load() Config {
 		ReaderDSN:      os.Getenv("MORTRIS_READER_DSN"),
 		ReaderMaxConns: int32(envInt("MORTRIS_READER_MAX_CONNS", 10)),
 		DiskPath:       envOr("MORTRIS_DISK_PATH", "/"),
+		SDKTest: SDKTestConfig{
+			Enabled:    os.Getenv("MORTRIS_SDK_TEST_MODE") == "1",
+			Deployment: os.Getenv("MORTRIS_DEPLOYMENT"),
+			ProjectID:  os.Getenv("MORTRIS_SDK_TEST_PROJECT"),
+			Token:      os.Getenv("MORTRIS_SDK_TEST_TOKEN"),
+		},
 	}
 	if cfg.ReaderDSN == "" {
 		cfg.ReaderDSN = cfg.WriterDSN
 	}
 	return cfg
+}
+
+func (c Config) ValidateSDKTest() error {
+	if !c.SDKTest.Enabled {
+		return nil
+	}
+	if c.SDKTest.Deployment != "staging" {
+		return fmt.Errorf("MORTRIS_SDK_TEST_MODE requires MORTRIS_DEPLOYMENT=staging")
+	}
+	if c.SDKTest.ProjectID == "" {
+		return fmt.Errorf("MORTRIS_SDK_TEST_PROJECT is required when SDK test mode is enabled")
+	}
+	if len(c.SDKTest.Token) < 16 {
+		return fmt.Errorf("MORTRIS_SDK_TEST_TOKEN must be at least 16 bytes")
+	}
+	return nil
 }
 
 func envOr(key, fallback string) string {
