@@ -74,7 +74,7 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) processBatch(w http.ResponseWriter, r *http.Request, requestID string, start time.Time, req *contracts.BatchIngestRequest, decodeRejections []contracts.RejectedEvent) {
-	scenario := s.SDKTest.Scenario(r, req.ProjectID)
+	scenario := s.sdkTestScenario(r.Context(), r, req.ProjectID)
 	if s.batchTestFailure(w, r, requestID, start, req, scenario) {
 		return
 	}
@@ -133,7 +133,7 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		s.logRequest(r, requestID, status, start, nil)
 		return
 	}
-	scenario := s.SDKTest.Scenario(r, req.ProjectID)
+	scenario := s.sdkTestScenario(r.Context(), r, req.ProjectID)
 
 	resp, err := s.Ingest.Policy(r.Context(), req, bearerToken(r), sourceIP(r))
 	if err != nil {

@@ -13,10 +13,10 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   if (loading) return <p role="status">Loading…</p>
   if (!session) return <Navigate to="/login" replace />
-  if (session.role !== 'admin') {
+  if (session.role !== 'owner') {
     return (
       <p role="alert">
-        This screen requires the admin role. You're signed in as viewer.
+        This screen requires the owner role.
       </p>
     )
   }

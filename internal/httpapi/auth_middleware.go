@@ -52,9 +52,16 @@ func requireProjectAccess(sess *adminauth.Session, r *http.Request) (string, err
 // "admin-only") and policy administration (kill-switch) endpoints —
 // viewer sessions can read analytics but never see raw per-installation
 // event history or change collection policy.
-func requireAdminRole(sess *adminauth.Session) error {
-	if sess.Role != "admin" {
-		return apierr.New(403, adminauth.CodeForbiddenRole, "admin role required")
+func requireProjectAdmin(sess *adminauth.Session, projectID string) error {
+	if !sess.CanManageProject(projectID) {
+		return apierr.New(403, adminauth.CodeForbiddenRole, "project administrator role required")
+	}
+	return nil
+}
+
+func requireOwner(sess *adminauth.Session) error {
+	if !sess.IsOwner() {
+		return apierr.New(403, adminauth.CodeForbiddenRole, "owner role required")
 	}
 	return nil
 }

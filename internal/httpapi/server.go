@@ -66,6 +66,7 @@ func NewServer(ingestSvc *ingest.Service, pool, readerPool *pgxpool.Pool) *Serve
 		ReaderPool:          readerPool,
 		Log:                 slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 		LoginThrottle:       adminauth.NewThrottle(),
+		SDKTest:             sdktest.New("", ""),
 		sem:                 make(chan struct{}, ingestSemaphoreSize),
 		dashboardFS:         dfs,
 		dashboardFileServer: http.FileServer(http.FS(dfs)),
@@ -95,6 +96,22 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/policy", s.requireSession(s.handlePolicyList))
 	mux.HandleFunc("POST /api/v1/policy", s.requireSession(s.handlePolicyCreate))
 	mux.HandleFunc("DELETE /api/v1/policy/{id}", s.requireSession(s.handlePolicyDelete))
+
+	mux.HandleFunc("GET /api/v1/projects", s.requireSession(s.handleProjectsList))
+	mux.HandleFunc("POST /api/v1/projects", s.requireSession(s.handleProjectCreate))
+	mux.HandleFunc("GET /api/v1/projects/{id}", s.requireSession(s.handleProjectGet))
+	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.requireSession(s.handleProjectUpdate))
+	mux.HandleFunc("POST /api/v1/projects/{id}/archive", s.requireSession(s.handleProjectArchive))
+	mux.HandleFunc("POST /api/v1/projects/{id}/restore", s.requireSession(s.handleProjectRestore))
+	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.requireSession(s.handleProjectPurge))
+	mux.HandleFunc("GET /api/v1/projects/{id}/members", s.requireSession(s.handleProjectMembersList))
+	mux.HandleFunc("POST /api/v1/projects/{id}/members", s.requireSession(s.handleProjectMemberCreate))
+	mux.HandleFunc("PATCH /api/v1/projects/{id}/members/{accountID}", s.requireSession(s.handleProjectMemberUpdate))
+	mux.HandleFunc("DELETE /api/v1/projects/{id}/members/{accountID}", s.requireSession(s.handleProjectMemberDelete))
+	mux.HandleFunc("POST /api/v1/projects/{id}/sdk-test", s.requireSession(s.handleSDKTestControl))
+	mux.HandleFunc("GET /api/v1/accounts", s.requireSession(s.handleAccountsList))
+	mux.HandleFunc("POST /api/v1/accounts", s.requireSession(s.handleAccountCreate))
+	mux.HandleFunc("PATCH /api/v1/accounts/{id}", s.requireSession(s.handleAccountUpdate))
 
 	// Catch-all: the embedded dashboard SPA (section 13.1). Lowest
 	// priority in ServeMux's pattern matching, so it never shadows any

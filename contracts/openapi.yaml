@@ -201,25 +201,39 @@ components:
     LoginRequest:
       type: object
       additionalProperties: false
-      required: [email, password]
+      required: [username, password]
       properties:
-        email: { type: string, format: email }
+        username: { type: string, description: Named shared-login username or legacy owner email. }
         password: { type: string }
+
+    ProjectAccess:
+      type: object
+      required: [id, display_name, environment, role]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        environment: { type: string }
+        role: { type: string, enum: [project_admin, viewer] }
 
     LoginResponse:
       type: object
-      required: [role, project_ids, expires_at]
+      required: [username, role, projects, project_ids, expires_at]
       properties:
-        role: { type: string, enum: [admin, viewer] }
+        username: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [owner, member] }
+        projects: { type: array, items: { $ref: "#/components/schemas/ProjectAccess" } }
         project_ids: { type: array, items: { type: string } }
         expires_at: { type: string, format: date-time }
 
     SessionInfo:
       type: object
-      required: [email, role, project_ids]
+      required: [username, role, projects, project_ids]
       properties:
-        email: { type: string, format: email }
-        role: { type: string, enum: [admin, viewer] }
+        username: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [owner, member] }
+        projects: { type: array, items: { $ref: "#/components/schemas/ProjectAccess" } }
         project_ids: { type: array, items: { type: string } }
 
     Overview:
@@ -510,11 +524,11 @@ paths:
 
   /api/v1/auth/login:
     post:
-      summary: Admin/viewer login (section 10.3)
+      summary: Owner or project-scoped account login
       security: []
       description: >
-        No public account creation — an admin_users row only ever comes
-        from the create-admin CLI. Throttled per email and per source IP;
+        Accounts are created by an owner or by an assigned project admin.
+        Throttled per login identifier and per source IP;
         the error is identical whether the account doesn't exist, is
         disabled, or the password is wrong.
       requestBody:

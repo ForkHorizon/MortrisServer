@@ -6,7 +6,7 @@ import { useAuth } from '../auth/useAuth'
 
 export function LoginPage() {
   const { session, login } = useAuth()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -18,12 +18,12 @@ export function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      await login(email, password)
+      await login(username, password)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'too_many_attempts') {
         setError('Too many attempts. Wait a minute and try again.')
       } else {
-        setError('Invalid email or password.')
+        setError('Invalid username or password.')
       }
     } finally {
       setSubmitting(false)
@@ -35,15 +35,15 @@ export function LoginPage() {
       <form onSubmit={handleSubmit} aria-labelledby="login-heading">
         <h1 id="login-heading">Mortris</h1>
         <div className="field">
-          <label htmlFor="email">Email</label>
+          <label htmlFor="username">Username or email</label>
           <input
-            id="email"
-            name="email"
-            type="email"
+            id="username"
+            name="username"
+            type="text"
             autoComplete="username"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
           />
         </div>
         <div className="field">

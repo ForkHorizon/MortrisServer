@@ -33,7 +33,7 @@ export function PolicyAdminPage() {
 
   if (!currentProject) return <p>Select a project to administer its kill switch.</p>
 
-  const isAdmin = session?.role === 'admin'
+  const isAdmin = session?.role === 'owner' || session?.projects.find((project) => project.id === currentProject)?.role === 'project_admin'
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -174,7 +174,7 @@ export function PolicyAdminPage() {
           </button>
         </form>
       ) : (
-        <p>Viewing only — creating or removing rules requires the admin role.</p>
+        <p>Viewing only — creating or removing rules requires project-admin access.</p>
       )}
     </section>
   )

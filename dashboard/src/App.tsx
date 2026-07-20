@@ -19,6 +19,9 @@ const SystemHealthPage = lazy(() =>
   import('./pages/SystemHealthPage').then((m) => ({ default: m.SystemHealthPage })),
 )
 const PolicyAdminPage = lazy(() => import('./pages/PolicyAdminPage').then((m) => ({ default: m.PolicyAdminPage })))
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
+const ProjectAdminPage = lazy(() => import('./pages/ProjectAdminPage').then((m) => ({ default: m.ProjectAdminPage })))
+const AccountsPage = lazy(() => import('./pages/AccountsPage').then((m) => ({ default: m.AccountsPage })))
 
 function RouteFallback() {
   return <p role="status">Loading…</p>
@@ -109,6 +112,36 @@ export default function App() {
                     <PolicyAdminPage />
                   </Suspense>
                 </RequireAuth>
+              }
+            />
+            <Route
+              path="/project"
+              element={
+                <RequireAuth>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ProjectAdminPage />
+                  </Suspense>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/projects"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ProjectsPage />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/accounts"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={<RouteFallback />}>
+                    <AccountsPage />
+                  </Suspense>
+                </RequireAdmin>
               }
             />
           </Routes>

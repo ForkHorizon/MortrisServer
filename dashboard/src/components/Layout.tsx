@@ -3,18 +3,23 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Overview', end: true, adminOnly: false },
-  { to: '/events', label: 'Event Explorer', end: false, adminOnly: false },
-  { to: '/funnel', label: 'Funnel', end: false, adminOnly: false },
-  { to: '/retention', label: 'Retention', end: false, adminOnly: false },
-  { to: '/installations', label: 'Installation Timeline', end: false, adminOnly: true },
-  { to: '/catalog', label: 'Catalog', end: false, adminOnly: false },
-  { to: '/system', label: 'System Health', end: false, adminOnly: false },
-  { to: '/policy', label: 'Policy', end: false, adminOnly: false },
+  { to: '/', label: 'Overview', end: true, managerOnly: false, ownerOnly: false },
+  { to: '/events', label: 'Event Explorer', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/funnel', label: 'Funnel', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/retention', label: 'Retention', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/installations', label: 'Installation Timeline', end: false, managerOnly: true, ownerOnly: false },
+  { to: '/catalog', label: 'Catalog', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/system', label: 'System Health', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/policy', label: 'Policy', end: false, managerOnly: false, ownerOnly: false },
+  { to: '/project', label: 'Project settings', end: false, managerOnly: true, ownerOnly: false },
+  { to: '/projects', label: 'Projects', end: false, managerOnly: false, ownerOnly: true },
+  { to: '/accounts', label: 'Accounts', end: false, managerOnly: false, ownerOnly: true },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
   const { session, currentProject, setCurrentProject, logout } = useAuth()
+  const projectRole = session?.projects.find((project) => project.id === currentProject)?.role
+  const canManageCurrent = session?.role === 'owner' || projectRole === 'project_admin'
 
   return (
     <div className="app-shell">
@@ -23,13 +28,13 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
       <header className="site-header">
         <span className="brand">Mortris</span>
-        {session && session.project_ids.length > 1 && (
+        {session && session.projects.length > 0 && (
           <label className="project-select">
             Project
             <select value={currentProject} onChange={(e) => setCurrentProject(e.target.value)}>
-              {session.project_ids.map((id) => (
-                <option key={id} value={id}>
-                  {id}
+              {session.projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.display_name} ({project.environment})
                 </option>
               ))}
             </select>
@@ -38,7 +43,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {session && (
           <div className="header-user">
             <span>
-              {session.email} ({session.role})
+              {session.username} ({session.role})
             </span>
             <button type="button" onClick={() => void logout()}>
               Sign out
@@ -50,7 +55,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {session && (
           <nav aria-label="Dashboard sections">
             <ul>
-              {NAV_ITEMS.filter((item) => !item.adminOnly || session.role === 'admin').map((item) => (
+              {NAV_ITEMS.filter((item) => !item.ownerOnly || session.role === 'owner').filter((item) => !item.managerOnly || canManageCurrent).map((item) => (
                 <li key={item.to}>
                   <NavLink to={item.to} end={item.end}>
                     {item.label}
