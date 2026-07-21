@@ -1,152 +1,57 @@
 import { Suspense, lazy } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import type { ComponentType } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
-import { RequireAuth, RequireAdmin } from './auth/RequireAuth'
+import { RequireAdmin, RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
-const EventExplorerPage = lazy(() =>
-  import('./pages/EventExplorerPage').then((m) => ({ default: m.EventExplorerPage })),
-)
+const EventExplorerPage = lazy(() => import('./pages/EventExplorerPage').then((m) => ({ default: m.EventExplorerPage })))
 const FunnelPage = lazy(() => import('./pages/FunnelPage').then((m) => ({ default: m.FunnelPage })))
 const RetentionPage = lazy(() => import('./pages/RetentionPage').then((m) => ({ default: m.RetentionPage })))
-const InstallationTimelinePage = lazy(() =>
-  import('./pages/InstallationTimelinePage').then((m) => ({ default: m.InstallationTimelinePage })),
-)
+const InstallationTimelinePage = lazy(() => import('./pages/InstallationTimelinePage').then((m) => ({ default: m.InstallationTimelinePage })))
 const CatalogPage = lazy(() => import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })))
-const SystemHealthPage = lazy(() =>
-  import('./pages/SystemHealthPage').then((m) => ({ default: m.SystemHealthPage })),
-)
+const SystemHealthPage = lazy(() => import('./pages/SystemHealthPage').then((m) => ({ default: m.SystemHealthPage })))
 const PolicyAdminPage = lazy(() => import('./pages/PolicyAdminPage').then((m) => ({ default: m.PolicyAdminPage })))
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
 const ProjectAdminPage = lazy(() => import('./pages/ProjectAdminPage').then((m) => ({ default: m.ProjectAdminPage })))
 const AccountsPage = lazy(() => import('./pages/AccountsPage').then((m) => ({ default: m.AccountsPage })))
 
+const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: boolean }> = [
+  { path: '/', Page: OverviewPage },
+  { path: '/events', Page: EventExplorerPage },
+  { path: '/funnel', Page: FunnelPage },
+  { path: '/retention', Page: RetentionPage },
+  { path: '/installations', Page: InstallationTimelinePage, adminOnly: true },
+  { path: '/catalog', Page: CatalogPage },
+  { path: '/system', Page: SystemHealthPage },
+  { path: '/policy', Page: PolicyAdminPage },
+  { path: '/project', Page: ProjectAdminPage },
+  { path: '/projects', Page: ProjectsPage, adminOnly: true },
+  { path: '/accounts', Page: AccountsPage, adminOnly: true },
+]
+
 function RouteFallback() {
   return <p role="status">Loading…</p>
 }
 
-export default function App() {
+function ProtectedPage({ Page, adminOnly = false }: { Page: ComponentType; adminOnly?: boolean }) {
+  const content = <Suspense fallback={<RouteFallback />}><Page /></Suspense>
+  return adminOnly ? <RequireAdmin>{content}</RequireAdmin> : <RequireAuth>{content}</RequireAuth>
+}
+
+function DashboardRoutes() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Layout>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <OverviewPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/events"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <EventExplorerPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/funnel"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <FunnelPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/retention"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <RetentionPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/installations"
-              element={
-                <RequireAdmin>
-                  <Suspense fallback={<RouteFallback />}>
-                    <InstallationTimelinePage />
-                  </Suspense>
-                </RequireAdmin>
-              }
-            />
-            <Route
-              path="/catalog"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <CatalogPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/system"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <SystemHealthPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/policy"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <PolicyAdminPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/project"
-              element={
-                <RequireAuth>
-                  <Suspense fallback={<RouteFallback />}>
-                    <ProjectAdminPage />
-                  </Suspense>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/projects"
-              element={
-                <RequireAdmin>
-                  <Suspense fallback={<RouteFallback />}>
-                    <ProjectsPage />
-                  </Suspense>
-                </RequireAdmin>
-              }
-            />
-            <Route
-              path="/accounts"
-              element={
-                <RequireAdmin>
-                  <Suspense fallback={<RouteFallback />}>
-                    <AccountsPage />
-                  </Suspense>
-                </RequireAdmin>
-              }
-            />
-          </Routes>
-        </Layout>
-      </AuthProvider>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      {dashboardRoutes.map(({ path, Page, adminOnly }) => (
+        <Route key={path} path={path} element={<ProtectedPage Page={Page} adminOnly={adminOnly} />} />
+      ))}
+    </Routes>
   )
+}
+
+export default function App() {
+  return <BrowserRouter><AuthProvider><Layout><DashboardRoutes /></Layout></AuthProvider></BrowserRouter>
 }

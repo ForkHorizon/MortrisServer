@@ -49,14 +49,17 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	maintRunner := &maintenance.Runner{Pool: pool, Log: server.Log}
 	go maintRunner.Run(stopCtx)
 
+	return serveHTTP(stopCtx, server, httpServer, cfg.ListenAddr)
+}
+
+func serveHTTP(stopCtx context.Context, server *httpapi.Server, httpServer *http.Server, listenAddr string) error {
 	errCh := make(chan error, 1)
 	go func() {
-		server.Log.Info("listening", "addr", cfg.ListenAddr)
+		server.Log.Info("listening", "addr", listenAddr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
-
 	select {
 	case err := <-errCh:
 		return err
