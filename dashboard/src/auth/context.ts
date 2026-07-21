@@ -6,7 +6,7 @@ export interface AuthState {
   loading: boolean
   currentProject: string
   setCurrentProject: (id: string) => void
-  login: (email: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
 

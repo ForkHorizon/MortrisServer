@@ -53,10 +53,6 @@ func (s *Server) handlePolicyCreate(w http.ResponseWriter, r *http.Request, sess
 	requestID := newRequestID()
 	start := time.Now()
 
-	if err := requireAdminRole(sess); err != nil {
-		s.fail(w, r, requestID, start, err)
-		return
-	}
 	if err := adminauth.CheckCSRF(r); err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -72,8 +68,8 @@ func (s *Server) handlePolicyCreate(w http.ResponseWriter, r *http.Request, sess
 		s.fail(w, r, requestID, start, decodeErr(err))
 		return
 	}
-	if !sess.HasProjectAccess(req.ProjectID) {
-		s.fail(w, r, requestID, start, apierr.New(403, adminauth.CodeForbiddenProject, "not scoped to this project"))
+	if err := requireProjectAdmin(sess, req.ProjectID); err != nil {
+		s.fail(w, r, requestID, start, err)
 		return
 	}
 
@@ -101,16 +97,16 @@ func (s *Server) handlePolicyDelete(w http.ResponseWriter, r *http.Request, sess
 	requestID := newRequestID()
 	start := time.Now()
 
-	if err := requireAdminRole(sess); err != nil {
-		s.fail(w, r, requestID, start, err)
-		return
-	}
 	if err := adminauth.CheckCSRF(r); err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}
 	projectID, err := requireProjectAccess(sess, r)
 	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	if err := requireProjectAdmin(sess, projectID); err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}

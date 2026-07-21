@@ -53,20 +53,23 @@ func runCreateAdmin(ctx context.Context, cfg config.Config, args []string) error
 func parseCreateAdminOptions(args []string) (createAdminOptions, error) {
 	fs := flag.NewFlagSet("create-admin", flag.ExitOnError)
 	email := fs.String("email", "", "admin email (required)")
-	role := fs.String("role", "", "admin or viewer (required)")
-	projects := fs.String("projects", "", "comma-separated project IDs this account may access (required)")
+	role := fs.String("role", "", "owner, project_admin, or viewer (required)")
+	projects := fs.String("projects", "", "comma-separated project IDs this account may access (required unless owner)")
 	if err := fs.Parse(args); err != nil {
 		return createAdminOptions{}, err
 	}
-	if *email == "" || *role == "" || *projects == "" {
-		return createAdminOptions{}, fmt.Errorf("--email, --role, and --projects are all required")
+	if *email == "" || *role == "" || (*role != "owner" && *projects == "") {
+		return createAdminOptions{}, fmt.Errorf("--email and --role are required; --projects is required unless --role=owner")
 	}
-	if *role != "admin" && *role != "viewer" {
-		return createAdminOptions{}, fmt.Errorf("--role must be \"admin\" or \"viewer\"")
+	if *role != "owner" && *role != "project_admin" && *role != "viewer" {
+		return createAdminOptions{}, fmt.Errorf("--role must be \"owner\", \"project_admin\", or \"viewer\"")
 	}
-	projectIDs := strings.Split(*projects, ",")
-	for i := range projectIDs {
-		projectIDs[i] = strings.TrimSpace(projectIDs[i])
+	var projectIDs []string
+	if strings.TrimSpace(*projects) != "" {
+		projectIDs = strings.Split(*projects, ",")
+		for i := range projectIDs {
+			projectIDs[i] = strings.TrimSpace(projectIDs[i])
+		}
 	}
 	return createAdminOptions{email: *email, role: *role, projects: *projects, projectIDs: projectIDs}, nil
 }
@@ -89,10 +92,10 @@ func createAdmin(ctx context.Context, pool *pgxpool.Pool, opts createAdminOption
 	var adminUserID int64
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO admin_users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id
-	`, opts.email, passwordHash, opts.role).Scan(&adminUserID); err != nil {
+	`, opts.email, passwordHash, globalRole(opts.role)).Scan(&adminUserID); err != nil {
 		return fmt.Errorf("insert admin_users (email already exists?): %w", err)
 	}
-	if err := assignAdminProjects(ctx, tx, adminUserID, opts.projectIDs); err != nil {
+	if err := assignAdminProjects(ctx, tx, adminUserID, opts.projectIDs, opts.role); err != nil {
 		return err
 	}
 	if err := auditAdminCreation(ctx, tx, adminUserID, opts); err != nil {
@@ -114,13 +117,24 @@ func validateAdminProjects(ctx context.Context, pool *pgxpool.Pool, projectIDs [
 	return nil
 }
 
-func assignAdminProjects(ctx context.Context, tx pgx.Tx, adminUserID int64, projectIDs []string) error {
+func assignAdminProjects(ctx context.Context, tx pgx.Tx, adminUserID int64, projectIDs []string, role string) error {
+	accessRole := "viewer"
+	if role == "project_admin" || role == "owner" {
+		accessRole = "project_admin"
+	}
 	for _, id := range projectIDs {
-		if _, err := tx.Exec(ctx, `INSERT INTO admin_user_projects (admin_user_id, project_id) VALUES ($1, $2)`, adminUserID, id); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO admin_user_projects (admin_user_id, project_id, access_role) VALUES ($1, $2, $3)`, adminUserID, id, accessRole); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func globalRole(role string) string {
+	if role == "owner" {
+		return "owner"
+	}
+	return "member"
 }
 
 func auditAdminCreation(ctx context.Context, tx pgx.Tx, adminUserID int64, opts createAdminOptions) error {

@@ -142,12 +142,12 @@ func (s *Server) handleInstallationTimeline(w http.ResponseWriter, r *http.Reque
 	requestID := newRequestID()
 	start := time.Now()
 
-	if err := requireAdminRole(sess); err != nil {
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	projectID, err := requireProjectAccess(sess, r)
-	if err != nil {
+	if err := requireProjectAdmin(sess, projectID); err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}

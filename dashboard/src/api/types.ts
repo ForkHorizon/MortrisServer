@@ -3,15 +3,42 @@
 // for the Go source of truth.
 
 export interface SessionInfo {
+  username: string
   email: string
-  role: 'admin' | 'viewer'
+  role: 'owner' | 'member'
   project_ids: string[]
+  projects: ProjectAccess[]
 }
 
-export interface LoginResponse {
-  role: 'admin' | 'viewer'
-  project_ids: string[]
+export interface ProjectAccess {
+  id: string
+  display_name: string
+  environment: string
+  role: 'project_admin' | 'viewer'
+}
+
+export interface LoginResponse extends SessionInfo {
   expires_at: string
+}
+
+export interface ManagedProject {
+  id: string
+  display_name: string
+  environment: string
+  retention_days: number
+  strict_catalog: boolean
+  enabled: boolean
+  archived_at?: string
+  sdk_test_enabled: boolean
+  sdk_test_scenario: string
+}
+
+export interface ProjectMember {
+  id: number
+  username: string
+  email?: string
+  access_role: 'project_admin' | 'viewer'
+  disabled: boolean
 }
 
 export interface Overview {

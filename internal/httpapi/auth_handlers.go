@@ -8,7 +8,7 @@ import (
 )
 
 type loginRequest struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -30,7 +30,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := adminauth.Login(r.Context(), s.Pool, s.LoginThrottle, req.Email, req.Password, sourceIP(r))
+	result, err := adminauth.Login(r.Context(), s.Pool, s.LoginThrottle, req.Username, req.Password, sourceIP(r))
 	if err != nil {
 		status := writeError(w, s.Log, requestID, err)
 		s.logRequest(r, requestID, status, start, nil)
@@ -38,11 +38,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	adminauth.SetAuthCookies(w, result.SessionToken, result.CSRFToken, result.ExpiresAt)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"role":        result.Session.Role,
-		"project_ids": result.Session.ProjectIDs,
-		"expires_at":  result.ExpiresAt.UTC().Format("2006-01-02T15:04:05.000Z"),
-	})
+	writeSession(w, result.Session, map[string]any{"expires_at": result.ExpiresAt.UTC().Format("2006-01-02T15:04:05.000Z")})
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
 
@@ -71,10 +67,20 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, sess *admi
 func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID := newRequestID()
 	start := time.Now()
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeSession(w, *sess, nil)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+func writeSession(w http.ResponseWriter, sess adminauth.Session, extra map[string]any) {
+	result := map[string]any{
+		"username":    sess.Username,
 		"email":       sess.Email,
 		"role":        sess.Role,
+		"projects":    sess.Projects,
 		"project_ids": sess.ProjectIDs,
-	})
-	s.logRequest(r, requestID, http.StatusOK, start, nil)
+	}
+	for key, value := range extra {
+		result[key] = value
+	}
+	writeJSON(w, http.StatusOK, result)
 }

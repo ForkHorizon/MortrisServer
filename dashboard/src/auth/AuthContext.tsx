@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiGet, apiPost, ApiError } from '../api/client'
-import type { SessionInfo } from '../api/types'
+import type { LoginResponse, SessionInfo } from '../api/types'
 import { AuthContext } from './context'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -13,7 +13,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiGet<SessionInfo>('/api/v1/auth/session')
       .then((s) => {
         setSession(s)
-        setCurrentProject(s.project_ids[0] ?? '')
+        const saved = localStorage.getItem('mortris_current_project')
+        setCurrentProjectState(s.projects.some((project) => project.id === saved) ? saved ?? '' : s.projects[0]?.id ?? '')
       })
       .catch(() => setSession(null))
       .finally(() => setLoading(false))
@@ -25,19 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('mortris_current_project', id)
   }, [])
 
-  useEffect(() => {
-    const saved = localStorage.getItem('mortris_current_project')
-    if (saved) setCurrentProjectState(saved)
-  }, [])
-
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await apiPost<{ role: 'admin' | 'viewer'; project_ids: string[] }>('/api/v1/auth/login', {
-      email,
+  const login = useCallback(async (username: string, password: string) => {
+    const res = await apiPost<LoginResponse>('/api/v1/auth/login', {
+      username,
       password,
     })
-    const s: SessionInfo = { email, role: res.role, project_ids: res.project_ids }
-    setSession(s)
-    setCurrentProject(s.project_ids[0] ?? '')
+    setSession(res)
+    setCurrentProject(res.projects[0]?.id ?? '')
   }, [setCurrentProject])
 
   const logout = useCallback(async () => {
