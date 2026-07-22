@@ -265,7 +265,8 @@ type GameplayScope struct {
 	PauseElapsedMS  int64 `json:"pause_elapsed_ms"`
 }
 type GameplayFriction struct {
-	BlockID, TargetID       int     `json:"block_id"`
+	BlockID                 int     `json:"block_id"`
+	TargetID                int     `json:"target_id"`
 	Attempts                int64   `json:"attempts"`
 	Placements              int64   `json:"placements"`
 	Falls                   int64   `json:"falls"`
@@ -361,9 +362,10 @@ type GameplayAttemptEvent struct {
 	MissingSupportGroups [][]int         `json:"missing_support_groups,omitempty"`
 }
 type GameplayAttempt struct {
-	AttemptID, ContentRevision string                 `json:"attempt_id"`
-	Events                     []GameplayAttemptEvent `json:"events"`
-	Truncated                  bool                   `json:"truncated"`
+	AttemptID       string                 `json:"attempt_id"`
+	ContentRevision string                 `json:"content_revision"`
+	Events          []GameplayAttemptEvent `json:"events"`
+	Truncated       bool                   `json:"truncated"`
 }
 
 func GetGameplayAttempt(ctx context.Context, pool *pgxpool.Pool, projectID, attemptID string) (*GameplayAttempt, error) {
