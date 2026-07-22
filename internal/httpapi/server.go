@@ -89,14 +89,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.requireSession(s.handleLogout))
 	mux.HandleFunc("GET /api/v1/auth/session", s.requireSession(s.handleSessionInfo))
 
-	mux.HandleFunc("GET /api/v1/analytics/overview", s.requireSession(s.handleOverview))
-	mux.HandleFunc("GET /api/v1/analytics/events", s.requireSession(s.handleEventExplorer))
-	mux.HandleFunc("GET /api/v1/analytics/funnel", s.requireSession(s.handleFunnel))
-	mux.HandleFunc("GET /api/v1/analytics/retention", s.requireSession(s.handleRetention))
-	mux.HandleFunc("GET /api/v1/analytics/installations/{id}", s.requireSession(s.handleInstallationTimeline))
-	mux.HandleFunc("GET /api/v1/analytics/catalog", s.requireSession(s.handleCatalog))
-	mux.HandleFunc("GET /api/v1/analytics/gameplay/diagnostics", s.requireSession(s.handleGameplayDiagnostics))
-	mux.HandleFunc("GET /api/v1/analytics/gameplay/attempts/{id}", s.requireSession(s.handleGameplayAttempt))
+	s.registerAnalyticsRoutes(mux)
 	mux.HandleFunc("GET /api/v1/system", s.requireSession(s.handleSystemHealth))
 
 	mux.HandleFunc("GET /api/v1/policy", s.requireSession(s.handlePolicyList))

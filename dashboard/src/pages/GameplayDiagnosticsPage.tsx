@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { apiGet } from '../api/client'
-import type { GameplayAttempt, GameplayDiagnostics } from '../api/types'
+import type { GameplayAttempt, GameplayDiagnostics, GameplayPlayersResult, TimelineResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { DataTable } from '../components/DataTable'
 import { DateRangeFields } from '../components/DateRangeFields'
@@ -15,12 +15,8 @@ export function GameplayDiagnosticsPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
   const { from, to, timezone } = range.params
-  const [attemptID, setAttemptID] = useState('')
-  const [selectedAttempt, setSelectedAttempt] = useState('')
   const fetchDiagnostics = useCallback(() => apiGet<GameplayDiagnostics>('/api/v1/analytics/gameplay/diagnostics', { project: currentProject, from, to, timezone }), [currentProject, from, to, timezone])
   const diagnostics = useApiData(fetchDiagnostics)
-  const fetchAttempt = useCallback(() => selectedAttempt ? apiGet<GameplayAttempt>(`/api/v1/analytics/gameplay/attempts/${encodeURIComponent(selectedAttempt)}`, { project: currentProject }) : Promise.resolve(null), [currentProject, selectedAttempt])
-  const timeline = useApiData<GameplayAttempt | null>(fetchAttempt)
 
   if (!currentProject) return <p>Select a project to inspect gameplay.</p>
   return <section aria-labelledby="gameplay-heading">
@@ -51,6 +47,17 @@ export function GameplayDiagnosticsPage() {
         { key: 'build_number', label: 'Build' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' },
       ]} />
     </>}
+    <PlayersSection project={currentProject} from={from} to={to} />
+    <AttemptSection project={currentProject} />
+  </section>
+}
+
+function AttemptSection({ project }: { project: string }) {
+  const [attemptID, setAttemptID] = useState('')
+  const [selectedAttempt, setSelectedAttempt] = useState('')
+  const fetchAttempt = useCallback(() => selectedAttempt ? apiGet<GameplayAttempt>(`/api/v1/analytics/gameplay/attempts/${encodeURIComponent(selectedAttempt)}`, { project }) : Promise.resolve(null), [project, selectedAttempt])
+  const timeline = useApiData<GameplayAttempt | null>(fetchAttempt)
+  return <>
     <h2>Attempt timeline and gravity reconstruction</h2>
     <div className="field"><label htmlFor="attempt-id">Attempt ID</label><input id="attempt-id" value={attemptID} onChange={(e) => setAttemptID(e.target.value)} /><button type="button" onClick={() => setSelectedAttempt(attemptID)}>Load attempt</button></div>
     {timeline.loading && <p role="status">Loading attempt…</p>}
@@ -60,5 +67,30 @@ export function GameplayDiagnosticsPage() {
       { key: 'properties', label: 'Payload', render: (r) => <code>{JSON.stringify(r.properties)}</code> },
       { key: 'missing_support_groups', label: 'Missing support by alternative', render: (r) => r.missing_support_groups?.map((group) => `[${group.join(', ')}]`).join(' OR ') ?? '' },
     ]} />}
-  </section>
+  </>
+}
+
+function PlayersSection({ project, from, to }: { project: string; from: string; to: string }) {
+  const [selectedPlayer, setSelectedPlayer] = useState('')
+  const fetchPlayers = useCallback(() => apiGet<GameplayPlayersResult>('/api/v1/analytics/gameplay/players', { project, from, to }), [project, from, to])
+  const players = useApiData<GameplayPlayersResult>(fetchPlayers)
+  const fetchTimeline = useCallback(() => selectedPlayer ? apiGet<TimelineResult>(`/api/v1/analytics/installations/${encodeURIComponent(selectedPlayer)}`, { project }) : Promise.resolve(null), [project, selectedPlayer])
+  const timeline = useApiData<TimelineResult | null>(fetchTimeline)
+  return <>
+    <h2>Anonymous players and devices</h2>
+    <p>The player ID is the SDK installation ID, not a game account or person. Select it to inspect every raw event for that device.</p>
+    {players.loading && <p role="status">Loading players…</p>}
+    {players.error && <p role="alert">{players.error}</p>}
+    {players.data && <DataTable caption="Anonymous player devices" rows={players.data.players} getRowKey={(r) => r.install_id} columns={[
+      { key: 'install_id', label: 'Player ID', render: (r) => <button type="button" onClick={() => setSelectedPlayer(r.install_id)}>{r.install_id}</button> },
+      { key: 'device_class', label: 'Phone' }, { key: 'os_version', label: 'OS' }, { key: 'device_total_memory_mb', label: 'Device RAM (MB)' },
+      { key: 'last_allocated_memory_mb', label: 'Allocated RAM (MB)' }, { key: 'last_reserved_memory_mb', label: 'Reserved RAM (MB)' }, { key: 'last_mono_used_memory_mb', label: 'Mono RAM (MB)' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' },
+    ]} />}
+    {timeline.loading && <p role="status">Loading player events…</p>}
+    {timeline.error && <p role="alert">{timeline.error}</p>}
+    {timeline.data && <DataTable caption={`Events for ${timeline.data.install_id}`} rows={timeline.data.events} getRowKey={(r) => r.event_id} columns={[
+      { key: 'effective_at', label: 'Time', render: (r) => new Date(r.effective_at).toLocaleString() }, { key: 'name', label: 'Event' },
+      { key: 'properties', label: 'Payload', render: (r) => <code>{JSON.stringify(r.properties)}</code> },
+    ]} />}
+  </>
 }

@@ -12,8 +12,10 @@ The test uses a dedicated strict project called `puzzle_gravity_test`. Puzzle se
 |---|---|
 | `migrations/0004_puzzle_gravity_diagnostics.sql` | Creates the strict test project and immutable revision, block, target, and placement-rule tables. |
 | `migrations/0005_puzzle_gravity_event_properties.sql` | Declares all allowed flat property keys. |
+| `migrations/0007_puzzle_gravity_device_profile.sql` | Adds the strict `device_profile` and `memory_sample` event schemas. |
 | `internal/ingest/batch_processing.go` | Rejects keys outside a declared strict catalogue. Empty legacy property declarations remain name-only strict. |
 | `internal/analytics/puzzle_gravity.go` | Catalogue validation/import, summary/scope/friction/daily reporting, and attempt-rule reconstruction. |
+| `internal/analytics/puzzle_players.go` | Builds the anonymous player/device list from raw installation events. |
 | `internal/analytics/puzzle_gravity_test.go` | Catalogue-reference and alternative-support tests. |
 | `internal/httpapi/server.go` | Registers import and diagnostics routes. |
 | `internal/httpapi/puzzle_gravity_handlers.go` | Admin/CSRF protected import and protected raw timeline routes. |
@@ -33,13 +35,19 @@ Events must be interpreted against their own `content_revision`, never the lates
 
 ## Events and properties
 
-Seeded events: `house_opened`, `wave_presented`, `detail_taken`, `placement_resolved`, `hint_used`, `app_backgrounded`, `app_foregrounded`, `attempt_closed`, `wave_completed`, `house_completed`.
+Seeded events: `house_opened`, `wave_presented`, `detail_taken`, `placement_resolved`, `hint_used`, `app_backgrounded`, `app_foregrounded`, `attempt_closed`, `wave_completed`, `house_completed`, `device_profile`, and `memory_sample`.
 
 Every event has `attempt_id`, `content_revision`, `city_id`, `house_id`, `wave_index`, `active_elapsed_ms`, `placed_block_count`, and monotonic `attempt_event_index`.
 
 `placement_resolved` additionally has selected block/group, candidate and nearest compatible target, quantized distance/release coordinates, `outcome`, `rule_state`, compact `placed_block_ids` when it fits, and `placed_state_hash` always.
 
 Outcomes are `placed`, `fell_no_snap_target`, `fell_missing_support`, `fell_missing_rule`, and `returned`. Rule states are `ground`, `support_satisfied`, `support_unsatisfied`, `rule_missing`, and `no_target`.
+
+### Anonymous player and device telemetry
+
+The player ID is the SDK's persistent random installation UUID (`install_id`), not an account ID, advertising ID, IMEI, or other personal identifier. It lets a project administrator select one device and see that device's raw event timeline.
+
+The SDK already attaches platform, OS version, device model (`device_class`), app/build version, locale, and timezone offset to every event. Puzzle adds one `device_profile` event at the first playable wave with total device RAM, graphics RAM, and screen dimensions. It then emits `memory_sample` only after each cumulative ten minutes of foreground active play, with Unity allocated/reserved memory and Mono used memory. It does not sample per frame or while backgrounded.
 
 ## New HTTP API
 
@@ -55,13 +63,17 @@ Optional filters: `from`, `to`, `timezone`, `city_id`, `house_id`, `wave_index`.
 
 Requires project-admin access. Returns the event timeline and `missing_support_groups` for each placement. Inner groups are AND requirements; outer groups are OR alternatives. If the payload omitted the placed-ID string for size, reconstruction continues from earlier successful placements in that attempt.
 
+`GET /api/v1/analytics/gameplay/players?project=puzzle_gravity_test&from=...&to=...`
+
+Requires project-admin access. Returns at most 500 anonymous installation IDs, last-seen device/app context, device RAM, most-recent sampled app RAM, attempt count, and falls. Selecting an ID uses the existing protected `GET /api/v1/analytics/installations/{installID}` raw timeline route.
+
 ## Dashboard
 
-The manager-only `/gameplay` page provides summary, city/house/wave, detail/target friction, daily reporting, and an attempt-timeline/reconstruction view.
+The manager-only `/gameplay` page provides summary, city/house/wave, detail/target friction, daily reporting, an attempt-timeline/reconstruction view, and an anonymous-player/device list that opens raw device events.
 
 ## Deployment order
 
-1. Review, commit, and deploy these Mortris changes; run migrations `0004` and `0005`.
+1. Review, commit, and deploy these Mortris changes; run migrations `0004`, `0005`, `0006`, and `0007`.
 2. Rebuild/embed the dashboard using the normal deployment process.
 3. Grant internal dashboard users access to `puzzle_gravity_test` (project-admin required for import and raw timeline).
 4. Import the content catalogue before publishing a test build.

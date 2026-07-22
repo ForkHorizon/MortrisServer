@@ -91,3 +91,28 @@ func (s *Server) handleGameplayAttempt(w http.ResponseWriter, r *http.Request, s
 	writeJSON(w, http.StatusOK, result)
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
+
+func (s *Server) handleGameplayPlayers(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	if err := requireProjectAdmin(sess, projectID); err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	from, to, err := analytics.ParseDateRange(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	result, err := analytics.GetGameplayPlayers(r.Context(), s.ReaderPool, projectID, from, to)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
