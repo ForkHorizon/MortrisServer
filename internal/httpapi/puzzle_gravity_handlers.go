@@ -25,7 +25,7 @@ func (s *Server) handlePuzzleContentImport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var catalog analytics.PuzzleCatalog
-	if err := decodeRequest(w, r, &catalog); err != nil {
+	if err := decodeRequestWithLimits(w, r, &catalog, maxPuzzleCatalogBody, maxPuzzleCatalogBody); err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}

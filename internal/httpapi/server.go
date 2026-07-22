@@ -33,7 +33,11 @@ import (
 const (
 	maxCompressedBody   = 256 * 1024
 	maxDecompressedBody = 1024 * 1024
-	handlerTimeout      = 10 * time.Second
+	// Puzzle catalogues contain the complete playable-content snapshot and may
+	// legitimately be larger than an SDK ingestion batch. This limit is used
+	// only by the authenticated catalogue import endpoint.
+	maxPuzzleCatalogBody = 4 * 1024 * 1024
+	handlerTimeout       = 10 * time.Second
 	// ingestSemaphoreSize bounds concurrent decompression + ingestion work
 	// (section 13.2), independent of Go's usual one-goroutine-per-request.
 	ingestSemaphoreSize = 64
@@ -166,10 +170,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 // set. It does not trust Content-Length — the decompressed limit is
 // enforced by capping the reader, not by checking a header.
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
-	if r.ContentLength > maxCompressedBody {
+	return readBodyWithLimits(w, r, maxCompressedBody, maxDecompressedBody)
+}
+
+func readBodyWithLimits(w http.ResponseWriter, r *http.Request, maxCompressed, maxDecompressed int64) ([]byte, error) {
+	if r.ContentLength > maxCompressed {
 		return nil, errBodyTooLarge
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxCompressedBody)
+	r.Body = http.MaxBytesReader(w, r.Body, maxCompressed)
 
 	if r.Header.Get("Content-Encoding") != "gzip" {
 		data, err := io.ReadAll(r.Body)
@@ -182,12 +190,12 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	}
 	defer func() { _ = gz.Close() }()
 
-	limited := io.LimitReader(gz, maxDecompressedBody+1)
+	limited := io.LimitReader(gz, maxDecompressed+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, normalizeBodyError(err)
 	}
-	if len(data) > maxDecompressedBody {
+	if int64(len(data)) > maxDecompressed {
 		return nil, errBodyTooLarge
 	}
 	return data, nil
