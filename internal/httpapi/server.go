@@ -91,6 +91,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/analytics/retention", s.requireSession(s.handleRetention))
 	mux.HandleFunc("GET /api/v1/analytics/installations/{id}", s.requireSession(s.handleInstallationTimeline))
 	mux.HandleFunc("GET /api/v1/analytics/catalog", s.requireSession(s.handleCatalog))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/diagnostics", s.requireSession(s.handleGameplayDiagnostics))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/attempts/{id}", s.requireSession(s.handleGameplayAttempt))
 	mux.HandleFunc("GET /api/v1/system", s.requireSession(s.handleSystemHealth))
 
 	mux.HandleFunc("GET /api/v1/policy", s.requireSession(s.handlePolicyList))
@@ -109,6 +111,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/projects/{id}/members/{accountID}", s.requireSession(s.handleProjectMemberUpdate))
 	mux.HandleFunc("DELETE /api/v1/projects/{id}/members/{accountID}", s.requireSession(s.handleProjectMemberDelete))
 	mux.HandleFunc("POST /api/v1/projects/{id}/sdk-test", s.requireSession(s.handleSDKTestControl))
+	mux.HandleFunc("POST /api/v1/projects/{id}/puzzle-content", s.requireSession(s.handlePuzzleContentImport))
 	mux.HandleFunc("GET /api/v1/accounts", s.requireSession(s.handleAccountsList))
 	mux.HandleFunc("POST /api/v1/accounts", s.requireSession(s.handleAccountCreate))
 	mux.HandleFunc("PATCH /api/v1/accounts/{id}", s.requireSession(s.handleAccountUpdate))

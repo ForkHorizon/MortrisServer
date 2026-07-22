@@ -17,6 +17,7 @@ const PolicyAdminPage = lazy(() => import('./pages/PolicyAdminPage').then((m) =>
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
 const ProjectAdminPage = lazy(() => import('./pages/ProjectAdminPage').then((m) => ({ default: m.ProjectAdminPage })))
 const AccountsPage = lazy(() => import('./pages/AccountsPage').then((m) => ({ default: m.AccountsPage })))
+const GameplayDiagnosticsPage = lazy(() => import('./pages/GameplayDiagnosticsPage').then((m) => ({ default: m.GameplayDiagnosticsPage })))
 
 const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: boolean }> = [
   { path: '/', Page: OverviewPage },
@@ -25,6 +26,7 @@ const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: bo
   { path: '/retention', Page: RetentionPage },
   { path: '/installations', Page: InstallationTimelinePage, adminOnly: true },
   { path: '/catalog', Page: CatalogPage },
+  { path: '/gameplay', Page: GameplayDiagnosticsPage, adminOnly: true },
   { path: '/system', Page: SystemHealthPage },
   { path: '/policy', Page: PolicyAdminPage },
   { path: '/project', Page: ProjectAdminPage },
