@@ -188,6 +188,29 @@ export interface GameplayAttempt {
   truncated: boolean
 }
 
+export interface GameplayPlayer {
+  install_id: string
+  last_seen_at: string
+  platform: string
+  os_version: string
+  device_class: string
+  app_version: string
+  build_number: string
+  locale: string
+  timezone_offset_minutes: number
+  device_total_memory_mb: number
+  graphics_memory_mb: number
+  last_allocated_memory_mb: number
+  last_reserved_memory_mb: number
+  last_mono_used_memory_mb: number
+  attempts: number
+  falls: number
+}
+
+export interface GameplayPlayersResult {
+  players: GameplayPlayer[]
+}
+
 export interface PoolStats {
   acquired_conns: number
   idle_conns: number
