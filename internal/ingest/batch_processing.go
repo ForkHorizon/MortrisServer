@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -101,20 +102,44 @@ func (s *Service) prepareEvent(ctx context.Context, projectID string, event cont
 		kind = "system"
 	}
 	if kind == "product" && strictCatalog {
-		known, err := s.isCatalogEvent(ctx, projectID, event.Name)
+		allowed, known, err := s.catalogProperties(ctx, projectID, event.Name)
 		if err != nil {
 			return preparedEvent{}, nil, err
 		}
 		if !known {
 			return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Code: contracts.CodeUnknownEvent}, nil
 		}
+		// Empty property declarations retain the original strict-name-only
+		// behavior for older projects. A declared list makes the event schema
+		// strict as well, which is what the gravity playtest needs.
+		if len(allowed) > 0 {
+			for key := range event.Properties {
+				if !allowed[key] {
+					return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Code: contracts.CodeInvalidPropertyKey}, nil
+				}
+			}
+		}
 	}
 	effectiveAt, quality := effectiveTime(parseTimestamp(event.OccurredAtClient), now, skew)
 	return preparedEvent{event: event, kind: kind, effectiveAt: effectiveAt, quality: quality}, nil, nil
 }
 
-func (s *Service) isCatalogEvent(ctx context.Context, projectID, name string) (bool, error) {
-	var exists bool
-	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM event_catalog WHERE project_id = $1 AND name = $2)`, projectID, name).Scan(&exists)
-	return exists, err
+func (s *Service) catalogProperties(ctx context.Context, projectID, name string) (map[string]bool, bool, error) {
+	var properties []struct {
+		Name string `json:"name"`
+	}
+	err := s.Pool.QueryRow(ctx, `SELECT properties FROM event_catalog WHERE project_id = $1 AND name = $2`, projectID, name).Scan(&properties)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	allowed := make(map[string]bool, len(properties))
+	for _, property := range properties {
+		if property.Name != "" {
+			allowed[property.Name] = true
+		}
+	}
+	return allowed, true, nil
 }

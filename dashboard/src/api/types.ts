@@ -123,6 +123,71 @@ export interface CatalogResult {
   entries: CatalogEntry[]
 }
 
+export interface GameplaySummary {
+  attempts: number
+  placements: number
+  falls: number
+  hints: number
+  completed_waves: number
+  completed_houses: number
+  active_elapsed_ms: number
+  wall_elapsed_ms: number
+  pause_count: number
+  pause_elapsed_ms: number
+}
+
+export interface GameplayScope extends GameplaySummary {
+  city_id: number
+  house_id: number
+  wave_index: number
+}
+
+export interface GameplayFriction {
+  block_id: number
+  target_id: number
+  attempts: number
+  placements: number
+  falls: number
+  hints: number
+  fall_rate: number
+  first_attempt_failure_rate: number
+}
+
+export interface GameplayDiagnostics {
+  summary: GameplaySummary
+  scopes: GameplayScope[]
+  friction: GameplayFriction[]
+  daily: GameplayDaily[]
+}
+
+export interface GameplayDaily {
+  day: string
+  city_id: number
+  house_id: number
+  wave_index: number
+  content_revision: string
+  build_number: string
+  attempts: number
+  placements: number
+  falls: number
+  hints: number
+}
+
+export interface GameplayAttemptEvent {
+  event_id: string
+  name: string
+  effective_at: string
+  properties: Record<string, unknown>
+  missing_support_groups?: number[][]
+}
+
+export interface GameplayAttempt {
+  attempt_id: string
+  content_revision: string
+  events: GameplayAttemptEvent[]
+  truncated: boolean
+}
+
 export interface PoolStats {
   acquired_conns: number
   idle_conns: number
