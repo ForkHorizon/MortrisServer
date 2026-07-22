@@ -21,7 +21,11 @@ type managedProject struct {
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, target any) error {
-	data, err := readBody(w, r)
+	return decodeRequestWithLimits(w, r, target, maxCompressedBody, maxDecompressedBody)
+}
+
+func decodeRequestWithLimits(w http.ResponseWriter, r *http.Request, target any, maxCompressed, maxDecompressed int64) error {
+	data, err := readBodyWithLimits(w, r, maxCompressed, maxDecompressed)
 	if err != nil {
 		return badRequest(err)
 	}

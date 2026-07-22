@@ -165,6 +165,20 @@ func TestReadBodyRejectsOversizedDecompressedPayload(t *testing.T) {
 	}
 }
 
+func TestReadBodyWithLimitsAcceptsPuzzleCatalogSizedPayload(t *testing.T) {
+	payload := bytes.Repeat([]byte("x"), maxDecompressedBody+1)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/puzzle_gravity_test/puzzle-content", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+
+	data, err := readBodyWithLimits(rec, req, maxPuzzleCatalogBody, maxPuzzleCatalogBody)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(data) != len(payload) {
+		t.Fatalf("body length = %d, want %d", len(data), len(payload))
+	}
+}
+
 func TestRequireProjectAccess(t *testing.T) {
 	sess := &adminauth.Session{ProjectIDs: []string{"alpha"}}
 
