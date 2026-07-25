@@ -69,6 +69,12 @@ docs/metrics.md         Metric definitions, verified by
                          internal/analytics/metrics_test.go
 docs/threat-model.md    Threats and mitigations
 docs/data-inventory.md  What's stored, per table, and what's never collected
+docs/client-integration.md  SDK integration contract for client teams
+docs/sdk-test-mode.md   Running the SDK against a test/staging project
+docs/dependencies.md    Third-party dependencies and why each is here
+docs/access-control.md  Dashboard operator roles and project scoping
+docs/puzzle-gravity-playtest-handoff.md  Puzzle gravity playtest analytics —
+                         see "Puzzle Gravity Playtest" below
 ```
 
 All dashboard screens from the plan's section 10.2 are implemented: Overview,
@@ -77,6 +83,25 @@ Event Explorer, Funnel, Installation Retention, Installation Timeline
 administration. Phase S4 (production hardening: TLS/firewall/secrets,
 off-host backup, restore drill, load/soak tests) is what's left — see the
 plan's section 14 for exit gates per phase.
+
+## Puzzle Gravity Playtest
+
+Mortris also hosts anonymous internal analytics for Puzzle's gravity-mechanic
+playtest, under a dedicated strict project (`puzzle_gravity_test`, 90-day
+retention). Puzzle sends semantic gameplay outcomes through the same durable
+SDK as any other client; Mortris preserves raw events, stores the exact
+content revision the player actually saw, and derives reporting and gravity
+diagnostics server-side. No PII, Unity objects, sprite data, drag frames, or
+rule arrays are collected — see
+[`docs/puzzle-gravity-playtest-handoff.md`](docs/puzzle-gravity-playtest-handoff.md)
+for the full event/property catalogue and schema.
+
+Relevant code: `internal/analytics/puzzle_gravity.go` (catalogue validation,
+summary/scope/friction/daily reporting, attempt-rule reconstruction),
+`internal/analytics/puzzle_players.go` (anonymous player/device list),
+`internal/httpapi/puzzle_gravity_handlers.go` (admin/CSRF-protected import
+and raw-timeline routes), and the designer-facing
+`dashboard/src/pages/GameplayDiagnosticsPage.tsx`.
 
 ## Verify
 
