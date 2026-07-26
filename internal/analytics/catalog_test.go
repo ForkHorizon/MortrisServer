@@ -46,28 +46,23 @@ func TestGetCatalog_CountsAndPercentInRange(t *testing.T) {
 		byName[e.Name] = e
 	}
 
-	start, ok := byName["level_start"]
-	if !ok {
-		t.Fatal("expected level_start in catalog result")
-	}
-	if start.EventCount != 3 {
-		t.Errorf("expected level_start count 3, got %d", start.EventCount)
-	}
-	if start.PercentOfTotal != 75 {
-		t.Errorf("expected level_start at 75%% of total, got %v", start.PercentOfTotal)
-	}
-	if len(start.Sparkline) == 0 {
+	assertCatalogVolume(t, byName, "level_start", 3, 75)
+	assertCatalogVolume(t, byName, "level_end", 1, 25)
+	if len(byName["level_start"].Sparkline) == 0 {
 		t.Error("expected a non-empty sparkline for an event with occurrences in range")
 	}
+}
 
-	end, ok := byName["level_end"]
+func assertCatalogVolume(t *testing.T, byName map[string]CatalogEntry, name string, wantCount int64, wantPercent float64) {
+	t.Helper()
+	e, ok := byName[name]
 	if !ok {
-		t.Fatal("expected level_end in catalog result")
+		t.Fatalf("expected %s in catalog result", name)
 	}
-	if end.EventCount != 1 {
-		t.Errorf("expected level_end count 1, got %d", end.EventCount)
+	if e.EventCount != wantCount {
+		t.Errorf("expected %s count %d, got %d", name, wantCount, e.EventCount)
 	}
-	if end.PercentOfTotal != 25 {
-		t.Errorf("expected level_end at 25%% of total, got %v", end.PercentOfTotal)
+	if e.PercentOfTotal != wantPercent {
+		t.Errorf("expected %s at %v%% of total, got %v", name, wantPercent, e.PercentOfTotal)
 	}
 }

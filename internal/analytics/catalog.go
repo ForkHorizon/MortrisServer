@@ -43,6 +43,24 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
+	result, err := queryCatalogEntries(ctx, pool, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	counts, total, err := countEventsByName(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	sparklines, err := sparklinesByName(ctx, pool, projectID, from, to, loc)
+	if err != nil {
+		return nil, err
+	}
+	applyCatalogVolume(result, counts, total, sparklines)
+	return result, nil
+}
+
+func queryCatalogEntries(ctx context.Context, pool *pgxpool.Pool, projectID string) (*CatalogResult, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT name, kind, description, owner, first_schema_version, properties, first_seen_at, last_seen_at
 		FROM event_catalog
@@ -57,7 +75,7 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 	// Entries starts as []CatalogEntry{}, not nil — encoding/json emits
 	// null for a nil slice, which crashes a naive frontend list render on
 	// a brand-new project with no catalog entries yet.
-	result := CatalogResult{Entries: []CatalogEntry{}}
+	result := &CatalogResult{Entries: []CatalogEntry{}}
 	for rows.Next() {
 		var e CatalogEntry
 		if err := rows.Scan(&e.Name, &e.Kind, &e.Description, &e.Owner, &e.FirstSchemaVersion, &e.Properties, &e.FirstSeenAt, &e.LastSeenAt); err != nil {
@@ -67,18 +85,12 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 		e.Sparkline = []DayCount{}
 		result.Entries = append(result.Entries, e)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+	return result, rows.Err()
+}
 
-	counts, total, err := countEventsByName(ctx, pool, projectID, from, to)
-	if err != nil {
-		return nil, err
-	}
-	sparklines, err := sparklinesByName(ctx, pool, projectID, from, to, loc)
-	if err != nil {
-		return nil, err
-	}
+// applyCatalogVolume merges the range-scoped counts/sparklines onto each
+// catalog entry in place.
+func applyCatalogVolume(result *CatalogResult, counts map[string]int64, total int64, sparklines map[string][]DayCount) {
 	for i := range result.Entries {
 		e := &result.Entries[i]
 		e.EventCount = counts[e.Name]
@@ -89,7 +101,6 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 			e.Sparkline = s
 		}
 	}
-	return &result, nil
 }
 
 func countEventsByName(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (map[string]int64, int64, error) {
