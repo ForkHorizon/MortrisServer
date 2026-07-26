@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { EventSelect } from '../components/EventSelect'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
@@ -44,7 +45,7 @@ export function EventExplorerPage() {
         <legend>Filters</legend>
         <div className="field">
           <label htmlFor="filter-name">Event name</label>
-          <input id="filter-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="level_start" />
+          <EventSelect id="filter-name" value={name} onChange={setName} />
         </div>
         <div className="field">
           <label htmlFor="filter-app-version">App version</label>

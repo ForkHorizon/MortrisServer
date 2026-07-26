@@ -1,27 +1,29 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiGet } from '../api/client'
 import type { FunnelResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { EventSelect } from '../components/EventSelect'
 import { DataTable } from '../components/DataTable'
+
+const MIN_STEPS = 2
+const MAX_STEPS = 5
 
 export function FunnelPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
-  const [stepsInput, setStepsInput] = useState('level_start, level_end')
+  const [steps, setSteps] = useState<string[]>(['level_start', 'level_end'])
   const [windowSeconds, setWindowSeconds] = useState(3600)
-  const steps = useMemo(
-    () =>
-      stepsInput
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    [stepsInput],
-  )
 
-  const canQuery = currentProject && steps.length >= 2 && steps.length <= 5
+  const setStep = (index: number, value: string) =>
+    setSteps((prev) => prev.map((s, i) => (i === index ? value : s)))
+  const addStep = () => setSteps((prev) => (prev.length < MAX_STEPS ? [...prev, ''] : prev))
+  const removeStep = (index: number) =>
+    setSteps((prev) => (prev.length > MIN_STEPS ? prev.filter((_, i) => i !== index) : prev))
+
+  const canQuery = currentProject && steps.length >= MIN_STEPS && steps.every(Boolean)
   const fetchFunnel = useCallback(
     () =>
       canQuery
@@ -47,16 +49,23 @@ export function FunnelPage() {
       <fieldset>
         <legend>Funnel definition</legend>
         <div className="field">
-          <label htmlFor="funnel-steps">Steps (2–5, comma-separated, must be cataloged product events)</label>
-          <input
-            id="funnel-steps"
-            value={stepsInput}
-            onChange={(e) => setStepsInput(e.target.value)}
-            aria-describedby="funnel-steps-hint"
-          />
-          <span id="funnel-steps-hint" className="hint">
-            e.g. level_start, level_end
-          </span>
+          <span>Steps (2–5, must be cataloged product events)</span>
+          {steps.map((step, i) => (
+            <div key={i} className="funnel-step">
+              <label htmlFor={`funnel-step-${i}`}>Step {i + 1}</label>
+              <EventSelect id={`funnel-step-${i}`} value={step} onChange={(v) => setStep(i, v)} />
+              {steps.length > MIN_STEPS && (
+                <button type="button" onClick={() => removeStep(i)} aria-label={`Remove step ${i + 1}`}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          {steps.length < MAX_STEPS && (
+            <button type="button" onClick={addStep}>
+              Add step
+            </button>
+          )}
         </div>
         <div className="field">
           <label htmlFor="funnel-window">Completion window (seconds, from first step)</label>

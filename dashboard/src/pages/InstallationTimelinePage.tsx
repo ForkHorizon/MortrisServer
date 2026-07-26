@@ -1,14 +1,42 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { TimelineResult } from '../api/types'
+import type { TimelineEvent, TimelineResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable } from '../components/DataTable'
 
+type SessionEvent = TimelineEvent & { deltaMs: number }
+
+// Groups the (newest-first) event list by session_id, preserving
+// most-recent-session-first order, and sorts each group ascending by
+// session_elapsed_ms so the +elapsed deltas read chronologically.
+function groupBySession(events: TimelineEvent[]): Array<{ sessionId: string; events: SessionEvent[] }> {
+  const order: string[] = []
+  const bySession = new Map<string, TimelineEvent[]>()
+  for (const e of events) {
+    if (!bySession.has(e.session_id)) {
+      order.push(e.session_id)
+      bySession.set(e.session_id, [])
+    }
+    bySession.get(e.session_id)!.push(e)
+  }
+  return order.map((sessionId) => {
+    const sorted = [...bySession.get(sessionId)!].sort((a, b) => a.session_elapsed_ms - b.session_elapsed_ms)
+    const withDeltas = sorted.map((e, i) => ({
+      ...e,
+      deltaMs: i === 0 ? 0 : e.session_elapsed_ms - sorted[i - 1].session_elapsed_ms,
+    }))
+    return { sessionId, events: withDeltas }
+  })
+}
+
 export function InstallationTimelinePage() {
   const { currentProject } = useAuth()
-  const [inputId, setInputId] = useState('')
-  const [installId, setInstallId] = useState('')
+  const [searchParams] = useSearchParams()
+  const idFromFeed = searchParams.get('id') ?? ''
+  const [inputId, setInputId] = useState(idFromFeed)
+  const [installId, setInstallId] = useState(idFromFeed)
   const fetchTimeline = useCallback(
     () =>
       installId && currentProject
@@ -20,6 +48,7 @@ export function InstallationTimelinePage() {
   )
 
   const { data, error, loading } = useApiData<TimelineResult | null>(fetchTimeline)
+  const sessions = useMemo(() => (data ? groupBySession(data.events) : []), [data])
 
   if (!currentProject) return <p>Select a project to look up an installation.</p>
 
@@ -56,18 +85,27 @@ export function InstallationTimelinePage() {
             <dd>{data.activated_at ? new Date(data.activated_at).toLocaleString() : 'Never'}</dd>
           </dl>
           {data.truncated && <p role="alert">Showing the most recent 500 events only.</p>}
-          <DataTable
-            caption={`Events for ${data.install_id}`}
-            columns={[
-              { key: 'effective_at', label: 'When', render: (r) => new Date(r.effective_at).toLocaleString() },
-              { key: 'name', label: 'Event' },
-              { key: 'event_kind', label: 'Kind' },
-              { key: 'time_quality', label: 'Clock quality' },
-              { key: 'properties', label: 'Properties', render: (r) => JSON.stringify(r.properties) },
-            ]}
-            rows={data.events}
-            getRowKey={(r) => r.event_id}
-          />
+          {sessions.map(({ sessionId, events }) => (
+            <details key={sessionId} open>
+              <summary>
+                Session {sessionId} — {events.length} event{events.length === 1 ? '' : 's'}, spanning{' '}
+                {events[events.length - 1].session_elapsed_ms}ms
+              </summary>
+              <DataTable
+                caption={`Events for session ${sessionId}`}
+                columns={[
+                  { key: 'effective_at', label: 'When', render: (r) => new Date(r.effective_at).toLocaleString() },
+                  { key: 'delta', label: '+elapsed', render: (r) => `+${r.deltaMs}ms` },
+                  { key: 'name', label: 'Event' },
+                  { key: 'event_kind', label: 'Kind' },
+                  { key: 'time_quality', label: 'Clock quality' },
+                  { key: 'properties', label: 'Properties', render: (r) => JSON.stringify(r.properties) },
+                ]}
+                rows={events}
+                getRowKey={(r) => r.event_id}
+              />
+            </details>
+          ))}
         </>
       )}
     </section>
