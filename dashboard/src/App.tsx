@@ -7,6 +7,7 @@ import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
+const EventFeedPage = lazy(() => import('./pages/EventFeedPage').then((m) => ({ default: m.EventFeedPage })))
 const EventExplorerPage = lazy(() => import('./pages/EventExplorerPage').then((m) => ({ default: m.EventExplorerPage })))
 const FunnelPage = lazy(() => import('./pages/FunnelPage').then((m) => ({ default: m.FunnelPage })))
 const RetentionPage = lazy(() => import('./pages/RetentionPage').then((m) => ({ default: m.RetentionPage })))
@@ -21,6 +22,7 @@ const GameplayDiagnosticsPage = lazy(() => import('./pages/GameplayDiagnosticsPa
 
 const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: boolean }> = [
   { path: '/', Page: OverviewPage },
+  { path: '/feed', Page: EventFeedPage },
   { path: '/events', Page: EventExplorerPage },
   { path: '/funnel', Page: FunnelPage },
   { path: '/retention', Page: RetentionPage },

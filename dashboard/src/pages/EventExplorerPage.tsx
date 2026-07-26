@@ -5,9 +5,66 @@ import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { EventSelect } from '../components/EventSelect'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
+
+interface Filters {
+  name: string
+  setName: (v: string) => void
+  appVersion: string
+  setAppVersion: (v: string) => void
+  buildNumber: string
+  setBuildNumber: (v: string) => void
+  platform: string
+  setPlatform: (v: string) => void
+}
+
+function EventExplorerFilters({ name, setName, appVersion, setAppVersion, buildNumber, setBuildNumber, platform, setPlatform }: Filters) {
+  return (
+    <fieldset>
+      <legend>Filters</legend>
+      <div className="field">
+        <label htmlFor="filter-name">Event name</label>
+        <EventSelect id="filter-name" value={name} onChange={setName} />
+      </div>
+      <div className="field">
+        <label htmlFor="filter-app-version">App version</label>
+        <input id="filter-app-version" value={appVersion} onChange={(e) => setAppVersion(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="filter-build">Build number</label>
+        <input id="filter-build" value={buildNumber} onChange={(e) => setBuildNumber(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="filter-platform">Platform</label>
+        <input id="filter-platform" value={platform} onChange={(e) => setPlatform(e.target.value)} />
+      </div>
+    </fieldset>
+  )
+}
+
+function EventExplorerResults({ data }: { data: EventExplorerResult }) {
+  return (
+    <>
+      <StatGrid>
+        <StatTile label="Total events" value={data.total_events} />
+        <StatTile label="Active installations" value={data.active_installations} />
+      </StatGrid>
+      <TrendChart data={data.trend} label="Events" />
+      <DataTable
+        caption="Event count by day"
+        columns={[
+          { key: 'day', label: 'Day' },
+          { key: 'count', label: 'Count' },
+        ]}
+        rows={data.trend}
+        getRowKey={(r) => r.day}
+      />
+    </>
+  )
+}
 
 export function EventExplorerPage() {
   const { currentProject } = useAuth()
@@ -40,46 +97,19 @@ export function EventExplorerPage() {
     <section aria-labelledby="events-heading">
       <h1 id="events-heading">Event Explorer</h1>
       <DateRangeFields range={range} />
-      <fieldset>
-        <legend>Filters</legend>
-        <div className="field">
-          <label htmlFor="filter-name">Event name</label>
-          <input id="filter-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="level_start" />
-        </div>
-        <div className="field">
-          <label htmlFor="filter-app-version">App version</label>
-          <input id="filter-app-version" value={appVersion} onChange={(e) => setAppVersion(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="filter-build">Build number</label>
-          <input id="filter-build" value={buildNumber} onChange={(e) => setBuildNumber(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="filter-platform">Platform</label>
-          <input id="filter-platform" value={platform} onChange={(e) => setPlatform(e.target.value)} />
-        </div>
-      </fieldset>
-
+      <EventExplorerFilters
+        name={name}
+        setName={setName}
+        appVersion={appVersion}
+        setAppVersion={setAppVersion}
+        buildNumber={buildNumber}
+        setBuildNumber={setBuildNumber}
+        platform={platform}
+        setPlatform={setPlatform}
+      />
       {loading && <p role="status">Loading…</p>}
       {error && <p role="alert">{error}</p>}
-      {data && (
-        <>
-          <StatGrid>
-            <StatTile label="Total events" value={data.total_events} />
-            <StatTile label="Active installations" value={data.active_installations} />
-          </StatGrid>
-          <TrendChart data={data.trend} label="Events" />
-          <DataTable
-            caption="Event count by day"
-            columns={[
-              { key: 'day', label: 'Day' },
-              { key: 'count', label: 'Count' },
-            ]}
-            rows={data.trend}
-            getRowKey={(r) => r.day}
-          />
-        </>
-      )}
+      {data && <EventExplorerResults data={data} />}
     </section>
   )
 }

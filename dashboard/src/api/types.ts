@@ -94,6 +94,8 @@ export interface TimelineEvent {
   event_id: string
   name: string
   event_kind: 'product' | 'system'
+  session_id: string
+  session_elapsed_ms: number
   effective_at: string
   time_quality: 'client' | 'batch_adjusted' | 'untrusted'
   properties: Record<string, unknown>
@@ -117,10 +119,33 @@ export interface CatalogEntry {
   known: boolean
   first_seen_at?: string
   last_seen_at?: string
+  event_count: number
+  percent_of_total: number
+  sparkline: DayCount[]
 }
 
 export interface CatalogResult {
   entries: CatalogEntry[]
+}
+
+export interface RecentEvent {
+  event_id: string
+  name: string
+  event_kind: 'product' | 'system'
+  install_id: string
+  platform: string
+  app_version: string
+  build_number: string
+  received_at: string
+  effective_at: string
+  time_quality: 'client' | 'batch_adjusted' | 'untrusted'
+  properties: Record<string, unknown>
+}
+
+export interface RecentEventsResult {
+  events: RecentEvent[]
+  next_before_received_at?: string
+  next_before_event_id?: string
 }
 
 export interface GameplaySummary {

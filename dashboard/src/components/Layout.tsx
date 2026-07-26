@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
+  { to: '/feed', label: 'Live Feed', end: false },
   { to: '/events', label: 'Event Explorer', end: false },
   { to: '/funnel', label: 'Funnel', end: false },
   { to: '/retention', label: 'Retention', end: false },

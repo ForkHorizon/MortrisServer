@@ -156,6 +156,17 @@ legend {
   gap: 0.5rem;
 }
 
+.funnel-step {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.funnel-step label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 input,
 select,
 button {

@@ -73,6 +73,31 @@ func (s *Server) handleEventExplorer(w http.ResponseWriter, r *http.Request, ses
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
 
+func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID := newRequestID()
+	start := time.Now()
+
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	filter, err := analytics.ParseRecentEventsFilter(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	result, err := analytics.GetRecentEvents(r.Context(), s.ReaderPool, projectID, filter)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 func (s *Server) handleFunnel(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID := newRequestID()
 	start := time.Now()
@@ -171,8 +196,18 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, sess *adm
 		s.fail(w, r, requestID, start, err)
 		return
 	}
+	from, to, err := analytics.ParseDateRange(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	loc, err := analytics.ParseTimezone(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
 
-	result, err := analytics.GetCatalog(r.Context(), s.ReaderPool, projectID)
+	result, err := analytics.GetCatalog(r.Context(), s.ReaderPool, projectID, from, to, loc)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

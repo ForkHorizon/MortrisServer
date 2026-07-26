@@ -14,12 +14,14 @@ import (
 const maxTimelineEvents = 500
 
 type TimelineEvent struct {
-	EventID     string          `json:"event_id"`
-	Name        string          `json:"name"`
-	EventKind   string          `json:"event_kind"`
-	EffectiveAt time.Time       `json:"effective_at"`
-	TimeQuality string          `json:"time_quality"`
-	Properties  json.RawMessage `json:"properties"`
+	EventID          string          `json:"event_id"`
+	Name             string          `json:"name"`
+	EventKind        string          `json:"event_kind"`
+	SessionID        string          `json:"session_id"`
+	SessionElapsedMs int64           `json:"session_elapsed_ms"`
+	EffectiveAt      time.Time       `json:"effective_at"`
+	TimeQuality      string          `json:"time_quality"`
+	Properties       json.RawMessage `json:"properties"`
 }
 
 type TimelineResult struct {
@@ -53,7 +55,7 @@ func GetInstallationTimeline(ctx context.Context, pool *pgxpool.Pool, projectID,
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT event_id, name, event_kind, effective_at, time_quality, properties
+		SELECT event_id, name, event_kind, session_id, session_elapsed_ms, effective_at, time_quality, properties
 		FROM events
 		WHERE project_id = $1 AND install_id = $2
 		ORDER BY effective_at DESC
@@ -66,7 +68,7 @@ func GetInstallationTimeline(ctx context.Context, pool *pgxpool.Pool, projectID,
 
 	for rows.Next() {
 		var e TimelineEvent
-		if err := rows.Scan(&e.EventID, &e.Name, &e.EventKind, &e.EffectiveAt, &e.TimeQuality, &e.Properties); err != nil {
+		if err := rows.Scan(&e.EventID, &e.Name, &e.EventKind, &e.SessionID, &e.SessionElapsedMs, &e.EffectiveAt, &e.TimeQuality, &e.Properties); err != nil {
 			return nil, err
 		}
 		result.Events = append(result.Events, e)

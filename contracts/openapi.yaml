@@ -315,11 +315,13 @@ components:
           type: array
           items:
             type: object
-            required: [event_id, name, event_kind, effective_at, time_quality, properties]
+            required: [event_id, name, event_kind, session_id, session_elapsed_ms, effective_at, time_quality, properties]
             properties:
               event_id: { type: string, format: uuid }
               name: { type: string }
               event_kind: { type: string, enum: [product, system] }
+              session_id: { type: string, format: uuid }
+              session_elapsed_ms: { type: integer, description: "Milliseconds since the session started, for grouping/deltas (Phase 1d)." }
               effective_at: { type: string, format: date-time }
               time_quality: { type: string, enum: [client, batch_adjusted, untrusted] }
               properties: { type: object }
@@ -332,7 +334,7 @@ components:
           type: array
           items:
             type: object
-            required: [name, kind, description, owner, first_schema_version, properties, known]
+            required: [name, kind, description, owner, first_schema_version, properties, known, event_count, percent_of_total, sparkline]
             properties:
               name: { type: string }
               kind: { type: string, enum: [product, system] }
@@ -343,6 +345,40 @@ components:
               known: { type: boolean, description: "false for auto-discovered events (empty description) — see section 7." }
               first_seen_at: { type: string, format: date-time }
               last_seen_at: { type: string, format: date-time }
+              event_count: { type: integer, description: "Event count within the requested from/to range (Phase 1c)." }
+              percent_of_total: { type: number, description: "Share of all events in range, 0-100." }
+              sparkline:
+                type: array
+                items:
+                  type: object
+                  required: [day, count]
+                  properties:
+                    day: { type: string, format: date }
+                    count: { type: integer }
+
+    RecentEventsResult:
+      type: object
+      required: [events]
+      properties:
+        next_before_received_at: { type: string, format: date-time, description: "Pass with next_before_event_id to fetch the next older page." }
+        next_before_event_id: { type: string, format: uuid }
+        events:
+          type: array
+          items:
+            type: object
+            required: [event_id, name, event_kind, install_id, platform, app_version, build_number, received_at, effective_at, time_quality, properties]
+            properties:
+              event_id: { type: string, format: uuid }
+              name: { type: string }
+              event_kind: { type: string, enum: [product, system] }
+              install_id: { type: string, format: uuid }
+              platform: { type: string }
+              app_version: { type: string }
+              build_number: { type: string }
+              received_at: { type: string, format: date-time }
+              effective_at: { type: string, format: date-time }
+              time_quality: { type: string, enum: [client, batch_adjusted, untrusted] }
+              properties: { type: object }
 
     SystemHealth:
       type: object
@@ -623,6 +659,46 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
 
+  /api/v1/analytics/events/recent:
+    get:
+      summary: Live Event Feed — newest-first raw events, keyset-paginated on received_at (Phase 1a)
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - name: name
+          in: query
+          description: Exact match, not restricted to the catalog — this is a raw debug tail.
+          schema: { type: string }
+        - name: platform
+          in: query
+          schema: { type: string }
+        - name: app_version
+          in: query
+          schema: { type: string }
+        - name: install_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          description: Defaults to 100, max 500.
+          schema: { type: integer }
+        - name: before_received_at
+          in: query
+          description: Keyset cursor from a prior response's next_before_received_at. Must be given with before_event_id.
+          schema: { type: string, format: date-time }
+        - name: before_event_id
+          in: query
+          description: Keyset cursor from a prior response's next_before_event_id. Must be given with before_received_at.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecentEventsResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
   /api/v1/analytics/funnel:
     get:
       summary: Funnel conversion query (section 10.2 #3)
@@ -692,10 +768,13 @@ paths:
 
   /api/v1/analytics/catalog:
     get:
-      summary: Event catalog definitions and known/unknown status (section 10.2 #6)
+      summary: Event catalog definitions, known/unknown status, and per-event volume breakdown (section 10.2 #6, Phase 1c)
       security: [{ dashboardSession: [] }]
       parameters:
         - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Timezone"
       responses:
         "200":
           content:
