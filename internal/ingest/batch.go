@@ -62,7 +62,7 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 		return nil, err
 	}
 	now := time.Now().UTC()
-	prepared, rejected, err := s.prepareBatch(ctx, req, decodeRejections, strictCatalog, now)
+	prepared, rejected, drifts, err := s.prepareBatch(ctx, req, decodeRejections, strictCatalog, now)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +75,12 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 		return nil, err
 	}
 	if err := s.recordBatchStats(ctx, req, len(accepted), len(duplicates), len(rejected)); err != nil {
+		return nil, err
+	}
+	if err := s.recordRejectionStats(ctx, req.ProjectID, rejected, now); err != nil {
+		return nil, err
+	}
+	if err := s.recordDriftStats(ctx, req.ProjectID, drifts, now); err != nil {
 		return nil, err
 	}
 

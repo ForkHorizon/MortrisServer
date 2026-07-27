@@ -116,6 +116,16 @@ nav[aria-label='Dashboard sections'] a.active {
   background: var(--bg-alt);
   font-weight: 600;
 }
+.nav-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
 
 main {
   flex: 1;

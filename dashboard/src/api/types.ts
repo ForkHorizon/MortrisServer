@@ -144,6 +144,9 @@ export interface CatalogEntry {
   event_count: number
   percent_of_total: number
   sparkline: DayCount[]
+  rejected_count: number
+  rejection_rate: number
+  drift?: Array<{ property_key: string; count: number }>
 }
 
 export interface CatalogResult {

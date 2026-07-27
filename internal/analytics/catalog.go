@@ -25,6 +25,19 @@ type CatalogEntry struct {
 	EventCount     int64      `json:"event_count"`
 	PercentOfTotal float64    `json:"percent_of_total"`
 	Sparkline      []DayCount `json:"sparkline"`
+	RejectedCount  int64      `json:"rejected_count"`
+	// RejectionRate is rejected / (rejected + accepted) over the requested
+	// range — "this event is being sent wrong N% of the time" (Phase 4).
+	RejectionRate float64           `json:"rejection_rate"`
+	Drift         []DriftedProperty `json:"drift,omitempty"`
+}
+
+// DriftedProperty is one undeclared property observed on an event that
+// does have a declared property list — a client sending "scoree" when
+// the catalog says "score" (Phase 4 schema drift detection).
+type DriftedProperty struct {
+	PropertyKey string `json:"property_key"`
+	Count       int64  `json:"count"`
 }
 
 type CatalogResult struct {
@@ -32,13 +45,9 @@ type CatalogResult struct {
 }
 
 // GetCatalog implements section 10.2 #6, plus Phase 1c's per-event volume
-// breakdown: counts, share of total, and a tiny daily sparkline for the
-// given range, so "which events came in and which didn't" is visible at a
-// glance. "Validation issues" from the plan's screen description isn't
-// populated — there is no per-event-name rejection tracking yet (only
-// project-wide ingestion_stats totals from Phase S1), and fabricating one
-// here would be guessing at data we don't have. Add it if/when rejection
-// tracking gains per-name granularity.
+// breakdown (counts, share of total, daily sparkline) and Phase 4's
+// per-name rejection rate and schema drift, so "which events came in,
+// which didn't, and why" is visible at a glance.
 func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, loc *time.Location) (*CatalogResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -56,7 +65,15 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 	if err != nil {
 		return nil, err
 	}
-	applyCatalogVolume(result, counts, total, sparklines)
+	rejections, err := rejectionsByName(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	drift, err := driftByName(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	applyCatalogVolume(result, counts, total, sparklines, rejections, drift)
 	return result, nil
 }
 
@@ -88,9 +105,9 @@ func queryCatalogEntries(ctx context.Context, pool *pgxpool.Pool, projectID stri
 	return result, rows.Err()
 }
 
-// applyCatalogVolume merges the range-scoped counts/sparklines onto each
-// catalog entry in place.
-func applyCatalogVolume(result *CatalogResult, counts map[string]int64, total int64, sparklines map[string][]DayCount) {
+// applyCatalogVolume merges the range-scoped counts/sparklines/rejections/
+// drift onto each catalog entry in place.
+func applyCatalogVolume(result *CatalogResult, counts map[string]int64, total int64, sparklines map[string][]DayCount, rejections map[string]int64, drift map[string][]DriftedProperty) {
 	for i := range result.Entries {
 		e := &result.Entries[i]
 		e.EventCount = counts[e.Name]
@@ -100,6 +117,11 @@ func applyCatalogVolume(result *CatalogResult, counts map[string]int64, total in
 		if s, ok := sparklines[e.Name]; ok {
 			e.Sparkline = s
 		}
+		e.RejectedCount = rejections[e.Name]
+		if attempted := e.EventCount + e.RejectedCount; attempted > 0 {
+			e.RejectionRate = float64(e.RejectedCount) / float64(attempted) * 100
+		}
+		e.Drift = drift[e.Name]
 	}
 }
 
@@ -152,4 +174,59 @@ func sparklinesByName(ctx context.Context, pool *pgxpool.Pool, projectID string,
 		sparklines[name] = append(sparklines[name], DayCount{Day: day.Format("2006-01-02"), Count: count})
 	}
 	return sparklines, rows.Err()
+}
+
+// rejectionsByName sums event_rejection_stats across all codes for the
+// given range, day-bucketed in UTC (matching how recordRejectionStats
+// writes it) rather than the project's display timezone — the range
+// bounds are widened by a day on each side so a UTC-day bucket that
+// straddles the caller's local-timezone range isn't dropped.
+func rejectionsByName(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (map[string]int64, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT name, SUM(count) FROM event_rejection_stats
+		WHERE project_id = $1 AND day >= $2 AND day < $3
+		GROUP BY name
+	`, projectID, from.AddDate(0, 0, -1), to.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var count int64
+		if err := rows.Scan(&name, &count); err != nil {
+			return nil, err
+		}
+		counts[name] = count
+	}
+	return counts, rows.Err()
+}
+
+// driftByName sums event_property_drift by (name, property_key) over the
+// same widened range as rejectionsByName, returning each name's drifted
+// properties ordered by observation count, highest first.
+func driftByName(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (map[string][]DriftedProperty, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT name, property_key, SUM(count) AS total FROM event_property_drift
+		WHERE project_id = $1 AND day >= $2 AND day < $3
+		GROUP BY name, property_key
+		ORDER BY name, total DESC
+	`, projectID, from.AddDate(0, 0, -1), to.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	drift := map[string][]DriftedProperty{}
+	for rows.Next() {
+		var name, propertyKey string
+		var count int64
+		if err := rows.Scan(&name, &propertyKey, &count); err != nil {
+			return nil, err
+		}
+		drift[name] = append(drift[name], DriftedProperty{PropertyKey: propertyKey, Count: count})
+	}
+	return drift, rows.Err()
 }

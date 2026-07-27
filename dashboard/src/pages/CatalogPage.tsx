@@ -17,6 +17,19 @@ const catalogColumns: Column<CatalogEntry>[] = [
   { key: 'event_count', label: 'Events (range)' },
   { key: 'percent_of_total', label: '% of total', render: (r) => `${r.percent_of_total.toFixed(1)}%` },
   { key: 'sparkline', label: 'Trend', render: (r) => <Sparkline data={r.sparkline} /> },
+  {
+    key: 'rejection_rate',
+    label: 'Rejected',
+    render: (r) => (r.rejected_count > 0 ? `${r.rejected_count} (${r.rejection_rate.toFixed(1)}%)` : '—'),
+  },
+  {
+    key: 'drift',
+    label: 'Schema drift',
+    render: (r) =>
+      r.drift && r.drift.length > 0
+        ? r.drift.map((d) => `${d.property_key} (${d.count})`).join(', ')
+        : '—',
+  },
   { key: 'description', label: 'Description', render: (r) => r.description || '—' },
   { key: 'owner', label: 'Owner', render: (r) => r.owner || '—' },
   {

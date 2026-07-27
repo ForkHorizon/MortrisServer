@@ -53,6 +53,56 @@ func TestGetCatalog_CountsAndPercentInRange(t *testing.T) {
 	}
 }
 
+func TestGetCatalog_RejectionsAndDrift(t *testing.T) {
+	pool := testPool(t)
+	projectID := seedProject(t, pool, false)
+	now := time.Now().UTC().Truncate(time.Second)
+	installID := "77777777-7777-4777-8777-777777777777"
+	seedInstallation(t, pool, projectID, installID, &now)
+
+	seedCatalogEntry(t, pool, projectID, "level_end", "product")
+	seedEvents(t, pool, projectID, []seedEvent{
+		{EventID: "f1111111-1111-4111-8111-111111111111", InstallID: installID, SessionID: "e1111111-1111-4111-8111-111111111111", Sequence: 1, Name: "level_end", Kind: "product", EffectiveAt: now},
+	})
+
+	day := now.Format("2006-01-02")
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO event_rejection_stats (project_id, name, code, day, count, last_seen_at)
+		VALUES ($1, 'level_end', 'invalid_property_key', $2, 3, $3)
+		ON CONFLICT (project_id, name, code, day) DO UPDATE SET count = EXCLUDED.count, last_seen_at = EXCLUDED.last_seen_at
+	`, projectID, day, now); err != nil {
+		t.Fatalf("seed rejection stats: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO event_property_drift (project_id, name, property_key, day, count, last_seen_at)
+		VALUES ($1, 'level_end', 'scoree', $2, 5, $3)
+		ON CONFLICT (project_id, name, property_key, day) DO UPDATE SET count = EXCLUDED.count, last_seen_at = EXCLUDED.last_seen_at
+	`, projectID, day, now); err != nil {
+		t.Fatalf("seed drift stats: %v", err)
+	}
+
+	result, err := GetCatalog(context.Background(), pool, projectID, now.Add(-time.Hour), now.Add(time.Hour), time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]CatalogEntry{}
+	for _, e := range result.Entries {
+		byName[e.Name] = e
+	}
+
+	entry := byName["level_end"]
+	if entry.RejectedCount != 3 {
+		t.Errorf("expected rejected_count 3, got %d", entry.RejectedCount)
+	}
+	// 1 accepted + 3 rejected = 4 attempted, 3/4 = 75%.
+	if entry.RejectionRate != 75 {
+		t.Errorf("expected rejection_rate 75, got %v", entry.RejectionRate)
+	}
+	if len(entry.Drift) != 1 || entry.Drift[0].PropertyKey != "scoree" || entry.Drift[0].Count != 5 {
+		t.Errorf("expected drift [scoree:5], got %+v", entry.Drift)
+	}
+}
+
 func assertCatalogVolume(t *testing.T, byName map[string]CatalogEntry, name string, wantCount int64, wantPercent float64) {
 	t.Helper()
 	e, ok := byName[name]
