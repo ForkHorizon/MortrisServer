@@ -109,11 +109,24 @@ func GetEventExplorer(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	// Trend starts as []DayCount{}, not nil — encoding/json emits null
-	// for a nil slice, which crashes a naive frontend list render
-	// whenever the filtered range has zero matching days.
 	result := EventExplorerResult{Trend: []DayCount{}}
-	if err := pool.QueryRow(ctx, `
+	total, active, err := countEventExplorerTotals(ctx, pool, projectID, from, to, f)
+	if err != nil {
+		return nil, err
+	}
+	result.TotalEvents, result.ActiveInstallations = total, active
+
+	trend, err := queryEventExplorerTrend(ctx, pool, projectID, from, to, loc, f)
+	if err != nil {
+		return nil, err
+	}
+	result.Trend = trend
+
+	return &result, nil
+}
+
+func countEventExplorerTotals(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, f EventExplorerFilter) (total, active int64, err error) {
+	err = pool.QueryRow(ctx, `
 		SELECT COUNT(*), COUNT(DISTINCT install_id) FROM events
 		WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3
 		  AND ($4::text IS NULL OR name = $4)
@@ -122,10 +135,15 @@ func GetEventExplorer(ctx context.Context, pool *pgxpool.Pool, projectID string,
 		  AND ($7::text IS NULL OR platform = $7)
 		  AND ($8::text IS NULL OR properties ->> $8 = $9)
 	`, projectID, from, to, f.Name, f.AppVersion, f.BuildNumber, f.Platform, f.PropertyKey, f.PropertyValue,
-	).Scan(&result.TotalEvents, &result.ActiveInstallations); err != nil {
-		return nil, err
-	}
+	).Scan(&total, &active)
+	return total, active, err
+}
 
+// queryEventExplorerTrend returns []DayCount{}, not nil, on the
+// zero-rows path — encoding/json emits null for a nil slice, which
+// crashes a naive frontend list render whenever the filtered range has
+// zero matching days.
+func queryEventExplorerTrend(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, loc *time.Location, f EventExplorerFilter) ([]DayCount, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT (effective_at AT TIME ZONE $10)::date AS day, COUNT(*)
 		FROM events
@@ -144,17 +162,14 @@ func GetEventExplorer(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	}
 	defer rows.Close()
 
+	trend := []DayCount{}
 	for rows.Next() {
 		var day time.Time
 		var count int64
 		if err := rows.Scan(&day, &count); err != nil {
 			return nil, err
 		}
-		result.Trend = append(result.Trend, DayCount{Day: day.Format("2006-01-02"), Count: count})
+		trend = append(trend, DayCount{Day: day.Format("2006-01-02"), Count: count})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
+	return trend, rows.Err()
 }

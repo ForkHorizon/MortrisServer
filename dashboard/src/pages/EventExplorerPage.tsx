@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { CatalogResult, EventExplorerResult, PropertyValuesResult } from '../api/types'
+import type { CatalogResult, EventExplorerResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
@@ -10,6 +10,11 @@ import { EventSelect } from '../components/EventSelect'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
+
+// Only used by the Property Value Inspector below — kept local instead
+// of growing the shared api/types.ts for a single consumer.
+type PropertyValueCount = { value: string; count: number }
+type PropertyValuesResult = { values: PropertyValueCount[] }
 
 // Filter state lives in the URL (plan 2c: saved views) — a filtered
 // Event Explorer view, including a property drill-down, is shareable
@@ -94,21 +99,39 @@ function EventExplorerFilters(f: Filters) {
   )
 }
 
-function PropertyValueInspector({
-  name,
-  propertyKey,
-  propertyValue,
-  onPickValue,
-  from,
-  to,
-}: {
+type PropertyValueInspectorProps = {
   name: string
   propertyKey: string
   propertyValue: string
   onPickValue: (value: string) => void
   from: string
   to: string
-}) {
+}
+
+function PropertyValueTable({ values, propertyValue, onPickValue }: { values: PropertyValueCount[]; propertyValue: string; onPickValue: (value: string) => void }) {
+  return (
+    <DataTable
+      caption="Top 20 values by count — spot bad or unexpected enum values here"
+      columns={[
+        {
+          key: 'value',
+          label: 'Value',
+          render: (r) => (
+            <button type="button" aria-pressed={r.value === propertyValue} onClick={() => onPickValue(r.value)}>
+              {r.value}
+              {r.value === propertyValue ? ' (filtering)' : ''}
+            </button>
+          ),
+        },
+        { key: 'count', label: 'Count' },
+      ]}
+      rows={values}
+      getRowKey={(r) => r.value}
+    />
+  )
+}
+
+function PropertyValueInspector({ name, propertyKey, propertyValue, onPickValue, from, to }: PropertyValueInspectorProps) {
   const { currentProject } = useAuth()
   const fetchValues = useCallback(
     () => apiGet<PropertyValuesResult>('/api/v1/analytics/events/property-values', { project: currentProject, name, property_key: propertyKey, from, to }),
@@ -123,26 +146,7 @@ function PropertyValueInspector({
       </h2>
       {loading && <p role="status">Loading…</p>}
       {error && <p role="alert">{error}</p>}
-      {data && (
-        <DataTable
-          caption="Top 20 values by count — spot bad or unexpected enum values here"
-          columns={[
-            {
-              key: 'value',
-              label: 'Value',
-              render: (r) => (
-                <button type="button" aria-pressed={r.value === propertyValue} onClick={() => onPickValue(r.value)}>
-                  {r.value}
-                  {r.value === propertyValue ? ' (filtering)' : ''}
-                </button>
-              ),
-            },
-            { key: 'count', label: 'Count' },
-          ]}
-          rows={data.values}
-          getRowKey={(r) => r.value}
-        />
-      )}
+      {data && <PropertyValueTable values={data.values} propertyValue={propertyValue} onPickValue={onPickValue} />}
     </section>
   )
 }

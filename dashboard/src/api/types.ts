@@ -65,15 +65,6 @@ export interface EventExplorerResult {
   trend: DayCount[]
 }
 
-export interface PropertyValueCount {
-  value: string
-  count: number
-}
-
-export interface PropertyValuesResult {
-  values: PropertyValueCount[]
-}
-
 export interface FunnelStep {
   name: string
   count: number
