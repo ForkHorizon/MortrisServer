@@ -11,16 +11,18 @@ import (
 // event count, new installations, DAU/WAU/MAU, sessions, average observed
 // session duration, and ingestion health.
 type Overview struct {
-	ProductEvents                int64   `json:"product_events"`
-	NewInstallations             int64   `json:"new_installations"`
-	DailyActiveInstallations     int64   `json:"daily_active_installations"`
-	WeeklyActiveInstallations    int64   `json:"weekly_active_installations"`
-	MonthlyActiveInstallations   int64   `json:"monthly_active_installations"`
-	Sessions                     int64   `json:"sessions"`
-	AvgObservedSessionDurationMs float64 `json:"avg_observed_session_duration_ms"`
-	IngestionAccepted            int64   `json:"ingestion_accepted"`
-	IngestionDuplicates          int64   `json:"ingestion_duplicates"`
-	IngestionRejected            int64   `json:"ingestion_rejected"`
+	ProductEvents                int64           `json:"product_events"`
+	NewInstallations             int64           `json:"new_installations"`
+	DailyActiveInstallations     int64           `json:"daily_active_installations"`
+	WeeklyActiveInstallations    int64           `json:"weekly_active_installations"`
+	MonthlyActiveInstallations   int64           `json:"monthly_active_installations"`
+	Sessions                     int64           `json:"sessions"`
+	AvgObservedSessionDurationMs float64         `json:"avg_observed_session_duration_ms"`
+	IngestionAccepted            int64           `json:"ingestion_accepted"`
+	IngestionDuplicates          int64           `json:"ingestion_duplicates"`
+	IngestionRejected            int64           `json:"ingestion_rejected"`
+	Daily                        []OverviewDaily `json:"daily"`
+	EventsByKind                 []EventKindDay  `json:"events_by_kind"`
 }
 
 // GetOverview implements every definition in docs/metrics.md except
@@ -34,25 +36,38 @@ func GetOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	var o Overview
-
-	if err := pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM events
-		WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3
-	`, projectID, from, to).Scan(&o.ProductEvents); err != nil {
-		return nil, err
-	}
-
-	if err := pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM installations
-		WHERE project_id = $1 AND first_product_event_at >= $2 AND first_product_event_at < $3
-	`, projectID, from, to).Scan(&o.NewInstallations); err != nil {
-		return nil, err
-	}
-
 	toLocal := to.In(loc)
 	dayStart := time.Date(toLocal.Year(), toLocal.Month(), toLocal.Day(), 0, 0, 0, 0, loc)
 	dayEnd := dayStart.Add(24 * time.Hour)
+
+	o, err := queryOverviewTotals(ctx, pool, projectID, from, to, dayStart, dayEnd)
+	if err != nil {
+		return nil, err
+	}
+
+	daily, err := queryOverviewDaily(ctx, pool, projectID, dayEnd, loc)
+	if err != nil {
+		return nil, err
+	}
+	o.Daily = daily
+
+	eventsByKind, err := queryEventsByKind(ctx, pool, projectID, from, to, loc)
+	if err != nil {
+		return nil, err
+	}
+	o.EventsByKind = eventsByKind
+
+	return o, nil
+}
+
+// queryOverviewTotals computes every range-scoped total in Overview except
+// Daily/EventsByKind, which need their own queries (see overview_daily.go).
+func queryOverviewTotals(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to, dayStart, dayEnd time.Time) (*Overview, error) {
+	var o Overview
+
+	if err := queryOverviewCounts(ctx, pool, projectID, from, to, &o); err != nil {
+		return nil, err
+	}
 	if err := activeInstallations(ctx, pool, projectID, dayStart, dayEnd, &o.DailyActiveInstallations); err != nil {
 		return nil, err
 	}
@@ -62,17 +77,43 @@ func GetOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from
 	if err := activeInstallations(ctx, pool, projectID, to.Add(-30*24*time.Hour), to, &o.MonthlyActiveInstallations); err != nil {
 		return nil, err
 	}
+	if err := queryAvgSessionDuration(ctx, pool, projectID, from, to, &o.AvgObservedSessionDurationMs); err != nil {
+		return nil, err
+	}
+	if err := queryIngestionTotals(ctx, pool, projectID, from, to, &o); err != nil {
+		return nil, err
+	}
+
+	return &o, nil
+}
+
+// queryOverviewCounts fills ProductEvents, NewInstallations, and Sessions —
+// the three plain COUNT(*) totals that don't need their own named helper.
+func queryOverviewCounts(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, o *Overview) error {
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM events
+		WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3
+	`, projectID, from, to).Scan(&o.ProductEvents); err != nil {
+		return err
+	}
 
 	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM installations
+		WHERE project_id = $1 AND first_product_event_at >= $2 AND first_product_event_at < $3
+	`, projectID, from, to).Scan(&o.NewInstallations); err != nil {
+		return err
+	}
+
+	return pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM (
 			SELECT DISTINCT install_id, session_id FROM events
 			WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3
 		) sessions
-	`, projectID, from, to).Scan(&o.Sessions); err != nil {
-		return nil, err
-	}
+	`, projectID, from, to).Scan(&o.Sessions)
+}
 
-	if err := pool.QueryRow(ctx, `
+func queryAvgSessionDuration(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, dest *float64) error {
+	return pool.QueryRow(ctx, `
 		WITH qualifying_sessions AS (
 			SELECT DISTINCT install_id, session_id FROM events
 			WHERE project_id = $1 AND event_kind = 'product' AND effective_at >= $2 AND effective_at < $3
@@ -84,19 +125,15 @@ func GetOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from
 			GROUP BY e.install_id, e.session_id
 		)
 		SELECT COALESCE(AVG(max_elapsed), 0) FROM session_maxes
-	`, projectID, from, to).Scan(&o.AvgObservedSessionDurationMs); err != nil {
-		return nil, err
-	}
+	`, projectID, from, to).Scan(dest)
+}
 
-	if err := pool.QueryRow(ctx, `
+func queryIngestionTotals(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, o *Overview) error {
+	return pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(accepted_count), 0), COALESCE(SUM(duplicate_count), 0), COALESCE(SUM(rejected_count), 0)
 		FROM ingestion_stats
 		WHERE project_id = $1 AND received_at >= $2 AND received_at < $3
-	`, projectID, from, to).Scan(&o.IngestionAccepted, &o.IngestionDuplicates, &o.IngestionRejected); err != nil {
-		return nil, err
-	}
-
-	return &o, nil
+	`, projectID, from, to).Scan(&o.IngestionAccepted, &o.IngestionDuplicates, &o.IngestionRejected)
 }
 
 func activeInstallations(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, dest *int64) error {

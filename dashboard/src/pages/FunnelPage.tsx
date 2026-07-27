@@ -7,6 +7,7 @@ import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
 import { DataTable, type Column } from '../components/DataTable'
+import { TrendChart } from '../components/TrendChart'
 
 const MIN_STEPS = 2
 const MAX_STEPS = 5
@@ -111,6 +112,15 @@ function FunnelResults({ data }: { data: FunnelResult }) {
       {data.truncated && (
         <p role="alert">This result hit the internal event cap and may undercount — narrow the date range.</p>
       )}
+      <TrendChart
+        categories={data.steps.map((s) => s.name)}
+        series={[{ name: 'Installations reached', data: data.steps.map((s) => s.count) }]}
+        label="Funnel conversion"
+        type="bar"
+        horizontal
+        height={80 + data.steps.length * 50}
+        valueLabel={(value, i) => `${value} (${(data.steps[i].conversion_from_previous * 100).toFixed(1)}%)`}
+      />
       <DataTable
         caption={`Funnel conversion (completion window: ${data.completion_window_seconds}s)`}
         columns={funnelColumns}

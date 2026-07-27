@@ -6,6 +6,7 @@ import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { DataTable } from '../components/DataTable'
+import { CohortHeatmap } from '../components/CohortHeatmap'
 
 function pct(retained: number, cohort: number): string {
   if (cohort === 0) return '—'
@@ -35,6 +36,7 @@ export function RetentionPage() {
       <DateRangeFields range={range} />
       {loading && <p role="status">Loading…</p>}
       {error && <p role="alert">{error}</p>}
+      {data && data.cohorts.length > 0 && <CohortHeatmap cohorts={data.cohorts} to={range.to} />}
       {data && (
         <DataTable
           caption="D1 / D7 / D30 retention by cohort day"

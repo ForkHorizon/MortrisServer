@@ -254,6 +254,32 @@ components:
         ingestion_accepted: { type: integer }
         ingestion_duplicates: { type: integer }
         ingestion_rejected: { type: integer }
+        daily:
+          description: Trailing 7 days of the same metrics, oldest first, for stat-tile sparklines.
+          type: array
+          items:
+            type: object
+            properties:
+              day: { type: string, format: date }
+              product_events: { type: integer }
+              new_installations: { type: integer }
+              daily_active_installations: { type: integer }
+              weekly_active_installations: { type: integer }
+              monthly_active_installations: { type: integer }
+              sessions: { type: integer }
+              avg_observed_session_duration_ms: { type: number }
+              ingestion_accepted: { type: integer }
+              ingestion_duplicates: { type: integer }
+              ingestion_rejected: { type: integer }
+        events_by_kind:
+          description: Product/system event split per day over the selected range.
+          type: array
+          items:
+            type: object
+            properties:
+              day: { type: string, format: date }
+              product: { type: integer }
+              system: { type: integer }
 
     EventExplorerResult:
       type: object

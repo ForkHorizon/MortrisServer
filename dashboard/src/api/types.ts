@@ -41,6 +41,26 @@ export interface ProjectMember {
   disabled: boolean
 }
 
+export interface OverviewDaily {
+  day: string
+  product_events: number
+  new_installations: number
+  daily_active_installations: number
+  weekly_active_installations: number
+  monthly_active_installations: number
+  sessions: number
+  avg_observed_session_duration_ms: number
+  ingestion_accepted: number
+  ingestion_duplicates: number
+  ingestion_rejected: number
+}
+
+export interface EventKindDay {
+  day: string
+  product: number
+  system: number
+}
+
 export interface Overview {
   product_events: number
   new_installations: number
@@ -52,6 +72,8 @@ export interface Overview {
   ingestion_accepted: number
   ingestion_duplicates: number
   ingestion_rejected: number
+  daily: OverviewDaily[]
+  events_by_kind: EventKindDay[]
 }
 
 export interface DayCount {
