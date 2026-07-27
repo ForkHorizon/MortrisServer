@@ -1,12 +1,15 @@
 import { useCallback } from 'react'
 import { apiGet } from '../api/client'
-import type { Overview, OverviewDaily } from '../api/types'
+import type { EventAnomaly, Overview, OverviewDaily } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
+import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
+import { AnomalyBadge } from '../components/AnomalyBadge'
+import { DigestPanel } from '../components/DigestPanel'
 
 function dailyTrend(daily: OverviewDaily[], key: keyof OverviewDaily) {
   return daily.map((d) => ({ day: d.day, count: Number(d[key]) }))
@@ -60,6 +63,22 @@ function OverviewEventsByKindChart({ data }: { data: Overview }) {
   )
 }
 
+function AnomaliesBanner({ anomalies }: { anomalies: EventAnomaly[] }) {
+  if (anomalies.length === 0) return null
+  return (
+    <div className="anomalies-banner" role="status">
+      <h2>Anomalies today</h2>
+      <ul>
+        {anomalies.map((a) => (
+          <li key={a.name}>
+            <strong>{a.name}</strong> <AnomalyBadge anomaly={a} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function OverviewPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
@@ -70,12 +89,15 @@ export function OverviewPage() {
   )
 
   const { data, error, loading } = useApiData<Overview>(fetchOverview)
+  const { data: anomalies } = useAnomalies(currentProject)
 
   if (!currentProject) return <p>Select a project to view its overview.</p>
 
   return (
     <section aria-labelledby="overview-heading">
       <h1 id="overview-heading">Overview</h1>
+      {anomalies && <AnomaliesBanner anomalies={anomalies.anomalies} />}
+      <DigestPanel projectID={currentProject} />
       <DateRangeFields range={range} />
       {loading && <p role="status">Loading…</p>}
       {error && <p role="alert">{error}</p>}

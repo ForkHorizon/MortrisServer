@@ -29,3 +29,4 @@ dashboard:
 
 build: dashboard
 	go build -o bin/analytics-server ./cmd/analytics-server
+	go build -o bin/mcp-analytics ./cmd/mcp-analytics

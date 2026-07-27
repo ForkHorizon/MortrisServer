@@ -342,6 +342,55 @@ components:
               d7: { type: integer }
               d30: { type: integer }
 
+    AnomaliesResult:
+      type: object
+      required: [anomalies]
+      properties:
+        anomalies:
+          type: array
+          items:
+            type: object
+            required: [name, today_count, median, modified_z_score]
+            properties:
+              name: { type: string }
+              today_count: { type: integer }
+              median: { type: number }
+              pct_change: { type: number, description: "Omitted when the 14-day baseline median is 0." }
+              modified_z_score: { type: number }
+
+    DigestResult:
+      type: object
+      required: [narration, anomalies, top_movers]
+      properties:
+        narration: { type: string, description: "Three sentences from Claude: what changed and where to look." }
+        anomalies:
+          type: array
+          items: { $ref: "#/components/schemas/AnomaliesResult/properties/anomalies/items" }
+        top_movers:
+          type: array
+          items: { $ref: "#/components/schemas/AnomaliesResult/properties/anomalies/items" }
+
+    NLQueryRequest:
+      type: object
+      required: [question, project]
+      properties:
+        question: { type: string, description: "Free-text analytics question." }
+        project: { type: string }
+
+    NLQueryResult:
+      type: object
+      required: [endpoint, interpreted_params, result]
+      properties:
+        endpoint:
+          type: string
+          enum: [overview, event_counts, recent_events, funnel, retention]
+          description: "Which existing read-only endpoint Claude routed the question to."
+        interpreted_params:
+          type: object
+          description: "The allowlisted filter params Claude filled in, run through that endpoint's normal validation."
+        result:
+          description: "That endpoint's normal response body (OverviewResult / EventExplorerResult / RecentEventsResult / FunnelResult / RetentionResult)."
+
     TimelineResult:
       type: object
       required: [install_id, registered_at, events, truncated]
@@ -808,6 +857,72 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+
+  /api/v1/analytics/anomalies:
+    get:
+      summary: Today vs. trailing-14-day-median event count anomalies (Phase 5 #2)
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Timezone"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnomaliesResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/v1/analytics/digest:
+    get:
+      summary: AI-narrated daily digest of today's anomalies and top movers (Phase 5 #3)
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/Timezone"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DigestResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "503":
+          description: ANTHROPIC_API_KEY not configured on this deployment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/v1/analytics/query:
+    post:
+      summary: Natural-language query, translated to one of the fixed read-only endpoints (Phase 5 #4)
+      description: >
+        Claude only ever selects an endpoint name and fills in that endpoint's
+        existing allowlisted filter fields — it never produces SQL. The
+        server runs the result through the exact same validation/query
+        functions the manual dashboard filters use, so a bad or ungrounded
+        guess just returns that endpoint's normal 400, not anything special.
+      security: [{ dashboardSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NLQueryRequest" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NLQueryResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "503":
+          description: ANTHROPIC_API_KEY not configured on this deployment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /api/v1/analytics/installations/{id}:
     get:

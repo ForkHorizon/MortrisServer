@@ -64,3 +64,4 @@ resend."
 | `forbidden_role` | 403 | The action requires the `admin` role; the session is `viewer` (installation timeline, policy administration — section 10.2 #5, Phase S3 kill-switch). |
 | `too_many_attempts` | 429 | Login throttle hit (10/minute per email, 30/minute per source IP). |
 | `not_found` | 404 | The requested installation ID or policy rule ID doesn't exist (or doesn't belong to the given project). |
+| `ai_unavailable` | 503 | An AI-backed endpoint (digest, Phase 5 #3; NL query, Phase 5 #4) was called but `ANTHROPIC_API_KEY` isn't configured on this deployment. |
