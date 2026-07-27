@@ -158,7 +158,7 @@ function EventExplorerResults({ data }: { data: EventExplorerResult }) {
         <StatTile label="Total events" value={data.total_events} />
         <StatTile label="Active installations" value={data.active_installations} />
       </StatGrid>
-      <TrendChart data={data.trend} label="Events" />
+      <TrendChart categories={data.trend.map((d) => d.day)} series={[{ name: 'Events', data: data.trend.map((d) => d.count) }]} label="Events" />
       <DataTable
         caption="Event count by day"
         columns={[
