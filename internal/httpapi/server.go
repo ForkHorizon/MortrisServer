@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ForkHorizon/Mortris/internal/adminauth"
@@ -52,6 +53,10 @@ type Server struct {
 	Log           *slog.Logger
 	LoginThrottle *adminauth.Throttle
 	SDKTest       *sdktest.Controller
+	// Anthropic is nil unless ANTHROPIC_API_KEY is set — the digest
+	// (Phase 5 #3) and NL query (Phase 5 #4) endpoints report
+	// analytics.ErrAIUnavailable in that case.
+	Anthropic *anthropic.Client
 
 	sem                 chan struct{}
 	dashboardFS         fs.FS

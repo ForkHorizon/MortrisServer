@@ -6,6 +6,7 @@ import { useNewEventBadge } from '../hooks/useNewEventBadge'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
+  { to: '/ask', label: 'Ask', end: false },
   { to: '/feed', label: 'Live Feed', end: false },
   { to: '/events', label: 'Event Explorer', end: false },
   { to: '/funnel', label: 'Funnel', end: false },

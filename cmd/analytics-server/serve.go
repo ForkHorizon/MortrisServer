@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
+
 	"github.com/ForkHorizon/Mortris/internal/config"
 	"github.com/ForkHorizon/Mortris/internal/httpapi"
 	"github.com/ForkHorizon/Mortris/internal/ingest"
@@ -36,6 +38,10 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	server := httpapi.NewServer(ingestSvc, pool, readerPool)
 	if cfg.SDKTest.Enabled {
 		server.EnableSDKTest(cfg.SDKTest.ProjectID, cfg.SDKTest.Token)
+	}
+	if cfg.AnthropicAPIKey != "" {
+		client := anthropic.NewClient()
+		server.Anthropic = &client
 	}
 	httpServer := server.NewHTTPServer(cfg.ListenAddr)
 

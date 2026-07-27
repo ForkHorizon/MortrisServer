@@ -1,22 +1,33 @@
 import { useCallback, useMemo, useState } from 'react'
 import { apiGet } from '../api/client'
-import type { CatalogEntry, CatalogResult } from '../api/types'
+import type { CatalogEntry, CatalogResult, EventAnomaly } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
+import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { DataTable, type Column } from '../components/DataTable'
 import { Sparkline } from '../components/Sparkline'
+import { AnomalyBadge } from '../components/AnomalyBadge'
 
 type SortKey = 'name' | 'count'
 
-const catalogColumns: Column<CatalogEntry>[] = [
+function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
+  return [
   { key: 'name', label: 'Name' },
   { key: 'kind', label: 'Kind' },
   { key: 'known', label: 'Status', render: (r) => (r.known ? 'Declared' : 'Auto-discovered (undeclared)') },
   { key: 'event_count', label: 'Events (range)' },
   { key: 'percent_of_total', label: '% of total', render: (r) => `${r.percent_of_total.toFixed(1)}%` },
   { key: 'sparkline', label: 'Trend', render: (r) => <Sparkline data={r.sparkline} /> },
+  {
+    key: 'anomaly',
+    label: 'Today vs typical',
+    render: (r) => {
+      const a = anomaliesByName.get(r.name)
+      return a ? <AnomalyBadge anomaly={a} /> : '—'
+    },
+  },
   {
     key: 'rejection_rate',
     label: 'Rejected',
@@ -42,7 +53,8 @@ const catalogColumns: Column<CatalogEntry>[] = [
     label: 'Last seen',
     render: (r) => (r.last_seen_at ? new Date(r.last_seen_at).toLocaleString() : '—'),
   },
-]
+  ]
+}
 
 function SortControls({ sortKey, setSortKey }: { sortKey: SortKey; setSortKey: (k: SortKey) => void }) {
   return (
@@ -74,6 +86,11 @@ export function CatalogPage() {
   )
 
   const { data, error, loading } = useApiData<CatalogResult>(fetchCatalog)
+  const { data: anomalies } = useAnomalies(currentProject)
+  const anomaliesByName = useMemo(
+    () => new Map(anomalies?.anomalies.map((a) => [a.name, a]) ?? []),
+    [anomalies],
+  )
   const sortedEntries = useMemo(() => {
     if (!data) return []
     const entries = [...data.entries]
@@ -94,7 +111,7 @@ export function CatalogPage() {
       {data && (
         <DataTable
           caption="Declared and auto-discovered events, with volume for the selected range"
-          columns={catalogColumns}
+          columns={catalogColumns(anomaliesByName)}
           rows={sortedEntries}
           getRowKey={(r) => r.name}
         />

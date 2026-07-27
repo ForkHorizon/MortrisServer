@@ -24,10 +24,16 @@ here that constrains keeping this a closed-source internal tool.
 | `golang.org/x/term` | BSD-3-Clause | `create-admin`'s no-echo password prompt |
 | `golang.org/x/text` | BSD-3-Clause | pgx transitive — Unicode normalization for SCRAM auth |
 | `golang.org/x/time` | BSD-3-Clause | `internal/ratelimit`'s token buckets |
+| `github.com/anthropics/anthropic-sdk-go` | MIT | Claude API client — `internal/analytics/digest.go`'s AI-narrated daily digest (Phase 5 #3) |
 
 Everything else in the codebase (`net/http`, `encoding/json`,
 `crypto/sha256`, `embed`, etc.) is Go standard library — no license
 question, ships with the Go toolchain.
+
+`cmd/mcp-analytics` (a separate binary — its own `go list -deps` graph,
+not linked into `analytics-server`) additionally pulls in
+`github.com/modelcontextprotocol/go-sdk` (MIT) for the MCP stdio server
+and its own transitive deps (`github.com/google/jsonschema-go`, etc.).
 
 ## npm (`dashboard/`, build-time only — never runs in production, see
 `dashboard/embed.go`)

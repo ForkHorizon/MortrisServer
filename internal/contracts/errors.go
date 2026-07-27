@@ -26,6 +26,7 @@ const (
 	CodePayloadTooLarge         = "payload_too_large"
 	CodeServerStoragePressure   = "server_storage_pressure"
 	CodeInternal                = "internal_error"
+	CodeAIUnavailable           = "ai_unavailable"
 )
 
 // ValidationError reports one structural contract violation. For batch

@@ -36,6 +36,11 @@ type Config struct {
 	// SDKTest enables deliberate client fault simulation. It is accepted
 	// only by a dedicated staging deployment for one test project.
 	SDKTest SDKTestConfig
+
+	// AnthropicAPIKey enables the analytics digest (Phase 5 #3) and NL
+	// query (Phase 5 #4) endpoints. Empty means they report
+	// analytics.ErrAIUnavailable.
+	AnthropicAPIKey string
 }
 
 type SDKTestConfig struct {
@@ -60,6 +65,7 @@ func Load() Config {
 			ProjectID:  os.Getenv("MORTRIS_SDK_TEST_PROJECT"),
 			Token:      os.Getenv("MORTRIS_SDK_TEST_TOKEN"),
 		},
+		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 	}
 	if cfg.ReaderDSN == "" {
 		cfg.ReaderDSN = cfg.WriterDSN

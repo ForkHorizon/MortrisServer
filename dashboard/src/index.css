@@ -127,6 +127,52 @@ nav[aria-label='Dashboard sections'] a.active {
   font-weight: 600;
 }
 
+.anomaly-badge {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.anomalies-banner {
+  border-left: 3px solid var(--danger);
+  background: var(--bg-alt);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+.anomalies-banner h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.anomalies-banner ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.anomalies-banner li {
+  margin-bottom: 0.25rem;
+}
+
+.digest-panel {
+  margin-bottom: 1.5rem;
+}
+.digest-narration {
+  margin-top: 0.5rem;
+  max-width: 65ch;
+}
+
+.ask-result pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-x: auto;
+  max-height: 32rem;
+}
+
 main {
   flex: 1;
   padding: 1.5rem 2rem;

@@ -153,6 +153,31 @@ export interface CatalogResult {
   entries: CatalogEntry[]
 }
 
+export interface EventAnomaly {
+  name: string
+  today_count: number
+  median: number
+  pct_change?: number
+  modified_z_score: number
+}
+
+export interface AnomaliesResult {
+  anomalies: EventAnomaly[]
+}
+
+export interface DigestResult {
+  narration: string
+  anomalies: EventAnomaly[]
+  top_movers: EventAnomaly[]
+}
+
+export interface NLQueryResult {
+  endpoint: 'overview' | 'event_counts' | 'recent_events' | 'funnel' | 'retention'
+  // Go's url.Values marshals as string[] per key, even for single values.
+  interpreted_params: Record<string, string[]>
+  result: unknown
+}
+
 export interface RecentEvent {
   event_id: string
   name: string
