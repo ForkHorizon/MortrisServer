@@ -15,8 +15,18 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: analytics-server <migrate|serve|export-events|parity-report|create-admin> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: analytics-server <migrate|serve|export-events|parity-report|create-admin|gen-events> [flags]")
 		os.Exit(2)
+	}
+
+	// gen-events is a pure file transform (events/catalog.yaml -> generated
+	// C#) with no DB config to load, unlike every other subcommand.
+	if os.Args[1] == "gen-events" {
+		if err := runGenEvents(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	cfg := config.Load()

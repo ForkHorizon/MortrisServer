@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import type { SessionInfo } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { useNewEventBadge } from '../hooks/useNewEventBadge'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
@@ -52,5 +53,23 @@ function Navigation({ session, currentProject }: { session: SessionInfo; current
   const projectRole = session.projects.find((project) => project.id === currentProject)?.role
   const canManageCurrent = session.role === 'owner' || projectRole === 'project_admin'
   const visibleItems = NAV_ITEMS.filter((item) => !item.ownerOnly || session.role === 'owner').filter((item) => !item.managerOnly || canManageCurrent)
-  return <nav aria-label="Dashboard sections"><ul>{visibleItems.map((item) => <li key={item.to}><NavLink to={item.to} end={item.end}>{item.label}</NavLink></li>)}</ul></nav>
+  const newEventCount = useNewEventBadge(currentProject)
+  return (
+    <nav aria-label="Dashboard sections">
+      <ul>
+        {visibleItems.map((item) => (
+          <li key={item.to}>
+            <NavLink to={item.to} end={item.end}>
+              {item.label}
+              {item.to === '/catalog' && newEventCount > 0 && (
+                <span className="nav-badge" title={`${newEventCount} new undeclared event${newEventCount === 1 ? '' : 's'} this week`}>
+                  {newEventCount}
+                </span>
+              )}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
 }

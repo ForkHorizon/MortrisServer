@@ -74,54 +74,102 @@ func batchCredentialHash(bearerToken string) ([sha256.Size]byte, error) {
 	return sha256.Sum256(credential), nil
 }
 
-func (s *Service) prepareBatch(ctx context.Context, req *contracts.BatchIngestRequest, decodeRejections []contracts.RejectedEvent, strictCatalog bool, now time.Time) ([]preparedEvent, []contracts.RejectedEvent, error) {
+func (s *Service) prepareBatch(ctx context.Context, req *contracts.BatchIngestRequest, decodeRejections []contracts.RejectedEvent, strictCatalog bool, now time.Time) ([]preparedEvent, []contracts.RejectedEvent, []driftObservation, error) {
 	rejected := append([]contracts.RejectedEvent{}, decodeRejections...)
 	prepared := make([]preparedEvent, 0, len(req.Events))
+	var drifts []driftObservation
 	skew := now.Sub(parseTimestamp(req.SentAtClient))
 	for i := range req.Events {
-		pe, rejection, err := s.prepareEvent(ctx, req.ProjectID, req.Events[i], strictCatalog, now, skew)
+		pe, rejection, drift, err := s.prepareEvent(ctx, req.ProjectID, req.Events[i], strictCatalog, now, skew)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if rejection != nil {
 			rejected = append(rejected, *rejection)
 			continue
 		}
+		if drift != nil {
+			drifts = append(drifts, *drift)
+		}
 		prepared = append(prepared, pe)
 	}
-	return prepared, rejected, nil
+	return prepared, rejected, drifts, nil
 }
 
-func (s *Service) prepareEvent(ctx context.Context, projectID string, event contracts.Event, strictCatalog bool, now time.Time, skew time.Duration) (preparedEvent, *contracts.RejectedEvent, error) {
+func (s *Service) prepareEvent(ctx context.Context, projectID string, event contracts.Event, strictCatalog bool, now time.Time, skew time.Duration) (preparedEvent, *contracts.RejectedEvent, *driftObservation, error) {
 	if err := contracts.ValidateEvent(&event); err != nil {
 		ve := err.(*contracts.ValidationError)
-		return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Code: ve.Code}, nil
+		return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: ve.Code}, nil, nil
 	}
 	kind := "product"
 	if contracts.ReservedSystemEvents[event.Name] {
 		kind = "system"
 	}
-	if kind == "product" && strictCatalog {
+	var drift *driftObservation
+	if kind == "product" {
+		// Looked up unconditionally (not just under strict_catalog) so
+		// schema-drift detection below also covers development-mode
+		// projects, where undeclared properties are the exact client bugs
+		// this is meant to surface early rather than silently store.
 		allowed, known, err := s.catalogProperties(ctx, projectID, event.Name)
 		if err != nil {
-			return preparedEvent{}, nil, err
+			return preparedEvent{}, nil, nil, err
 		}
-		if !known {
-			return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Code: contracts.CodeUnknownEvent}, nil
-		}
-		// Empty property declarations retain the original strict-name-only
-		// behavior for older projects. A declared list makes the event schema
-		// strict as well, which is what the gravity playtest needs.
-		if len(allowed) > 0 {
-			for key := range event.Properties {
-				if !allowed[key] {
-					return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Code: contracts.CodeInvalidPropertyKey}, nil
-				}
+		if strictCatalog {
+			if rejection := enforceCatalogStrict(event, allowed, known); rejection != nil {
+				return preparedEvent{}, rejection, nil, nil
 			}
+		} else if known {
+			drift = detectDrift(event, allowed)
 		}
 	}
 	effectiveAt, quality := effectiveTime(parseTimestamp(event.OccurredAtClient), now, skew)
-	return preparedEvent{event: event, kind: kind, effectiveAt: effectiveAt, quality: quality}, nil, nil
+	return preparedEvent{event: event, kind: kind, effectiveAt: effectiveAt, quality: quality}, nil, drift, nil
+}
+
+// enforceCatalogStrict is section 7's strict_catalog check: unknown event
+// names are always rejected, and once a declared property list exists,
+// undeclared property keys are too. Empty property declarations retain
+// the original strict-name-only behavior for older projects.
+func enforceCatalogStrict(event contracts.Event, allowed map[string]bool, known bool) *contracts.RejectedEvent {
+	if !known {
+		return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeUnknownEvent}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	for key := range event.Properties {
+		if !allowed[key] {
+			return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeInvalidPropertyKey}
+		}
+	}
+	return nil
+}
+
+// detectDrift is the non-strict counterpart to enforceCatalogStrict: it
+// observes rather than rejects.
+func detectDrift(event contracts.Event, allowed map[string]bool) *driftObservation {
+	if len(allowed) == 0 {
+		return nil
+	}
+	var undeclared []string
+	for key := range event.Properties {
+		if !allowed[key] {
+			undeclared = append(undeclared, key)
+		}
+	}
+	if len(undeclared) == 0 {
+		return nil
+	}
+	return &driftObservation{name: event.Name, keys: undeclared}
+}
+
+// driftObservation is one event's undeclared-property keys, surfaced by
+// GetCatalog as schema drift so client bugs ("scoree" instead of "score")
+// show up before someone notices the dashboard numbers look wrong.
+type driftObservation struct {
+	name string
+	keys []string
 }
 
 func (s *Service) catalogProperties(ctx context.Context, projectID, name string) (map[string]bool, bool, error) {

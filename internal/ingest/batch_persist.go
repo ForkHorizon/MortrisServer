@@ -139,3 +139,58 @@ func (s *Service) recordBatchStats(ctx context.Context, req *contracts.BatchInge
 	`, req.ProjectID, req.InstallID, accepted, duplicates, rejected)
 	return err
 }
+
+// recordRejectionStats aggregates this batch's rejections by (name, code)
+// and upserts day-bucketed counters (section: Phase 4 catalog governance)
+// so the catalog can show which events are failing and how often — the
+// events table itself never stores rejections at all.
+func (s *Service) recordRejectionStats(ctx context.Context, projectID string, rejected []contracts.RejectedEvent, now time.Time) error {
+	if len(rejected) == 0 {
+		return nil
+	}
+	type key struct{ name, code string }
+	counts := map[key]int64{}
+	for _, r := range rejected {
+		counts[key{name: r.Name, code: r.Code}]++
+	}
+	day := now.UTC().Format("2006-01-02")
+	for k, count := range counts {
+		if _, err := s.Pool.Exec(ctx, `
+			INSERT INTO event_rejection_stats (project_id, name, code, day, count, last_seen_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (project_id, name, code, day)
+			DO UPDATE SET count = event_rejection_stats.count + EXCLUDED.count, last_seen_at = EXCLUDED.last_seen_at
+		`, projectID, k.name, k.code, day, count, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// recordDriftStats aggregates this batch's undeclared-property
+// observations by (event name, property key) and upserts day-bucketed
+// counters, mirroring recordRejectionStats.
+func (s *Service) recordDriftStats(ctx context.Context, projectID string, drifts []driftObservation, now time.Time) error {
+	if len(drifts) == 0 {
+		return nil
+	}
+	type key struct{ name, propertyKey string }
+	counts := map[key]int64{}
+	for _, d := range drifts {
+		for _, k := range d.keys {
+			counts[key{name: d.name, propertyKey: k}]++
+		}
+	}
+	day := now.UTC().Format("2006-01-02")
+	for k, count := range counts {
+		if _, err := s.Pool.Exec(ctx, `
+			INSERT INTO event_property_drift (project_id, name, property_key, day, count, last_seen_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (project_id, name, property_key, day)
+			DO UPDATE SET count = event_property_drift.count + EXCLUDED.count, last_seen_at = EXCLUDED.last_seen_at
+		`, projectID, k.name, k.propertyKey, day, count, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}

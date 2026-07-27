@@ -83,7 +83,11 @@ type BatchIngestRequest struct {
 
 type RejectedEvent struct {
 	EventID string `json:"event_id"`
-	Code    string `json:"code"`
+	// Name is best-effort: for events that failed strict JSON decoding it
+	// comes from a permissive scan of the raw payload, so it may be empty
+	// even when the client did send a name.
+	Name string `json:"name,omitempty"`
+	Code string `json:"code"`
 }
 
 type BatchIngestResponse struct {
