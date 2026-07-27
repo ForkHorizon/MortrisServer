@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -22,9 +21,10 @@ type nlQueryRequest struct {
 // handleNLQuery (Phase 5 #4) is the only handler that lets an LLM pick
 // its own parameters. It's safe by construction: analytics.InterpretQuery
 // only ever returns one of the five allowlisted endpoint names plus the
-// existing named filter fields — dispatchNLQuery below runs those through
-// the identical Parse*/Get* pipeline every manual dashboard filter uses,
-// so nothing Claude produces ever reaches SQL directly.
+// existing named filter fields — dispatchNLQuery (nlquery_dispatch.go)
+// runs those through the identical Parse*/Get* pipeline every manual
+// dashboard filter uses, so nothing Claude produces ever reaches SQL
+// directly.
 func (s *Server) handleNLQuery(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID := newRequestID()
 	start := time.Now()
@@ -34,22 +34,13 @@ func (s *Server) handleNLQuery(w http.ResponseWriter, r *http.Request, sess *adm
 		return
 	}
 
-	data, err := readBody(w, r)
+	req, err := decodeNLQueryRequest(w, r)
 	if err != nil {
-		s.fail(w, r, requestID, start, badRequest(err))
+		s.fail(w, r, requestID, start, err)
 		return
 	}
-	var req nlQueryRequest
-	if err := decodeJSONStrict(data, &req); err != nil {
-		s.fail(w, r, requestID, start, decodeErr(err))
-		return
-	}
-	if req.Question == "" {
-		s.fail(w, r, requestID, start, apierr.New(400, contracts.CodeInvalidRequest, "question is required"))
-		return
-	}
-	if req.Project == "" || !sess.HasProjectAccess(req.Project) {
-		s.fail(w, r, requestID, start, apierr.New(403, adminauth.CodeForbiddenProject, "not scoped to this project"))
+	if err := validateNLQueryRequest(sess, req); err != nil {
+		s.fail(w, r, requestID, start, err)
 		return
 	}
 
@@ -78,6 +69,28 @@ func (s *Server) handleNLQuery(w http.ResponseWriter, r *http.Request, sess *adm
 	s.logRequest(r, requestID, http.StatusOK, start, map[string]any{"endpoint": intent.Endpoint})
 }
 
+func decodeNLQueryRequest(w http.ResponseWriter, r *http.Request) (nlQueryRequest, error) {
+	data, err := readBody(w, r)
+	if err != nil {
+		return nlQueryRequest{}, badRequest(err)
+	}
+	var req nlQueryRequest
+	if err := decodeJSONStrict(data, &req); err != nil {
+		return nlQueryRequest{}, decodeErr(err)
+	}
+	return req, nil
+}
+
+func validateNLQueryRequest(sess *adminauth.Session, req nlQueryRequest) error {
+	if req.Question == "" {
+		return apierr.New(400, contracts.CodeInvalidRequest, "question is required")
+	}
+	if req.Project == "" || !sess.HasProjectAccess(req.Project) {
+		return apierr.New(403, adminauth.CodeForbiddenProject, "not scoped to this project")
+	}
+	return nil
+}
+
 func nlQueryValues(p analytics.NLQueryParams) url.Values {
 	v := url.Values{}
 	setIf := func(key string, val *string) {
@@ -103,76 +116,4 @@ func nlQueryValues(p analytics.NLQueryParams) url.Values {
 		v.Set("window_seconds", strconv.Itoa(*p.WindowSeconds))
 	}
 	return v
-}
-
-// dispatchNLQuery runs the model-selected endpoint+params through the
-// exact same validation and query functions as the corresponding manual
-// handler in analytics_handlers.go — same catalog allowlisting, same
-// date-range cap, same everything.
-func (s *Server) dispatchNLQuery(ctx context.Context, endpoint, projectID string, values url.Values) (any, error) {
-	switch endpoint {
-	case "overview":
-		from, to, err := analytics.ParseDateRange(values)
-		if err != nil {
-			return nil, err
-		}
-		loc, err := analytics.ParseTimezone(values)
-		if err != nil {
-			return nil, err
-		}
-		return analytics.GetOverview(ctx, s.ReaderPool, projectID, from, to, loc)
-
-	case "event_counts":
-		from, to, err := analytics.ParseDateRange(values)
-		if err != nil {
-			return nil, err
-		}
-		loc, err := analytics.ParseTimezone(values)
-		if err != nil {
-			return nil, err
-		}
-		filter, err := analytics.ParseEventExplorerFilter(ctx, s.ReaderPool, projectID, values)
-		if err != nil {
-			return nil, err
-		}
-		return analytics.GetEventExplorer(ctx, s.ReaderPool, projectID, from, to, loc, filter)
-
-	case "recent_events":
-		filter, err := analytics.ParseRecentEventsFilter(values)
-		if err != nil {
-			return nil, err
-		}
-		return analytics.GetRecentEvents(ctx, s.ReaderPool, projectID, filter)
-
-	case "funnel":
-		from, to, err := analytics.ParseDateRange(values)
-		if err != nil {
-			return nil, err
-		}
-		steps, err := analytics.ParseFunnelSteps(ctx, s.ReaderPool, projectID, values)
-		if err != nil {
-			return nil, err
-		}
-		window, err := analytics.ParseCompletionWindow(values)
-		if err != nil {
-			return nil, err
-		}
-		return analytics.GetFunnel(ctx, s.ReaderPool, projectID, steps, from, to, window)
-
-	case "retention":
-		from, to, err := analytics.ParseDateRange(values)
-		if err != nil {
-			return nil, err
-		}
-		loc, err := analytics.ParseTimezone(values)
-		if err != nil {
-			return nil, err
-		}
-		return analytics.GetRetention(ctx, s.ReaderPool, projectID, from, to, loc)
-
-	default:
-		// Unreachable: analytics.InterpretQuery already allowlists endpoint
-		// names against the same set before returning.
-		return nil, apierr.New(400, contracts.CodeInvalidRequest, "unknown endpoint: "+endpoint)
-	}
 }

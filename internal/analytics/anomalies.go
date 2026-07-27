@@ -69,6 +69,27 @@ func computeEventStats(ctx context.Context, pool *pgxpool.Pool, projectID string
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	windowStart := today.AddDate(0, 0, -anomalyBaselineDays)
 
+	counts, err := queryDailyCounts(ctx, pool, projectID, loc, windowStart, today)
+	if err != nil {
+		return nil, err
+	}
+
+	todayKey := today.Format("2006-01-02")
+	stats := make([]EventAnomaly, 0, len(counts))
+	for name, byDay := range counts {
+		s, ok := eventStatFor(today, todayKey, byDay)
+		if !ok {
+			continue
+		}
+		s.Name = name
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
+// queryDailyCounts buckets each event name's raw event count into local
+// calendar days (in loc) over [windowStart, today], inclusive of today.
+func queryDailyCounts(ctx context.Context, pool *pgxpool.Pool, projectID string, loc *time.Location, windowStart, today time.Time) (map[string]map[string]int64, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT name, (effective_at AT TIME ZONE $4)::date AS day, COUNT(*) AS cnt
 		FROM events
@@ -93,38 +114,37 @@ func computeEventStats(ctx context.Context, pool *pgxpool.Pool, projectID string
 		}
 		counts[name][day.Format("2006-01-02")] = cnt
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	return counts, rows.Err()
+}
+
+// eventStatFor computes one event name's today-vs-baseline stats, or
+// false if its trailing baseline volume is too low to be meaningful
+// (anomalyMinBaselineVolume). The returned EventAnomaly's Name is unset —
+// callers fill it in, since this only sees the per-day count map.
+func eventStatFor(today time.Time, todayKey string, byDay map[string]int64) (EventAnomaly, bool) {
+	baseline := make([]float64, 0, anomalyBaselineDays)
+	var baselineTotal float64
+	for i := anomalyBaselineDays; i >= 1; i-- {
+		day := today.AddDate(0, 0, -i).Format("2006-01-02")
+		v := float64(byDay[day])
+		baseline = append(baseline, v)
+		baselineTotal += v
 	}
-
-	todayKey := today.Format("2006-01-02")
-	stats := make([]EventAnomaly, 0, len(counts))
-	for name, byDay := range counts {
-		baseline := make([]float64, 0, anomalyBaselineDays)
-		var baselineTotal float64
-		for i := anomalyBaselineDays; i >= 1; i-- {
-			day := today.AddDate(0, 0, -i).Format("2006-01-02")
-			v := float64(byDay[day])
-			baseline = append(baseline, v)
-			baselineTotal += v
-		}
-		if baselineTotal < anomalyMinBaselineVolume {
-			continue
-		}
-		todayCount := byDay[todayKey]
-
-		median := medianOf(baseline)
-		mad := medianAbsDeviation(baseline, median)
-		z := modifiedZScore(float64(todayCount), median, mad)
-
-		s := EventAnomaly{Name: name, TodayCount: todayCount, Median: median, ModifiedZScore: z}
-		if median > 0 {
-			pct := (float64(todayCount) - median) / median * 100
-			s.PctChange = &pct
-		}
-		stats = append(stats, s)
+	if baselineTotal < anomalyMinBaselineVolume {
+		return EventAnomaly{}, false
 	}
-	return stats, nil
+	todayCount := byDay[todayKey]
+
+	median := medianOf(baseline)
+	mad := medianAbsDeviation(baseline, median)
+	z := modifiedZScore(float64(todayCount), median, mad)
+
+	s := EventAnomaly{TodayCount: todayCount, Median: median, ModifiedZScore: z}
+	if median > 0 {
+		pct := (float64(todayCount) - median) / median * 100
+		s.PctChange = &pct
+	}
+	return s, true
 }
 
 func medianOf(values []float64) float64 {

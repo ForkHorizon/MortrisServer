@@ -41,32 +41,50 @@ func GetDigest(ctx context.Context, pool *pgxpool.Pool, client *anthropic.Client
 	if err != nil {
 		return nil, err
 	}
-
-	sort.Slice(stats, func(i, j int) bool {
-		return math.Abs(stats[i].ModifiedZScore) > math.Abs(stats[j].ModifiedZScore)
-	})
-
-	anomalies := make([]EventAnomaly, 0)
-	for _, s := range stats {
-		if math.Abs(s.ModifiedZScore) > anomalyZThreshold {
-			anomalies = append(anomalies, s)
-		}
-	}
-	movers := stats
-	if len(movers) > topMoversLimit {
-		movers = movers[:topMoversLimit]
-	}
+	anomalies, movers := selectAnomaliesAndMovers(stats)
 
 	if len(anomalies) == 0 && len(movers) == 0 {
 		return &DigestResult{Narration: "No notable event-volume changes today.", Anomalies: anomalies, TopMovers: movers}, nil
 	}
 
+	narration, err := narrateDigest(ctx, client, anomalies, movers)
+	if err != nil {
+		return nil, err
+	}
+	return &DigestResult{Narration: narration, Anomalies: anomalies, TopMovers: movers}, nil
+}
+
+// selectAnomaliesAndMovers splits the full per-event stats into the
+// alert-worthy subset (anomalies) and the broader top-N by |z-score|
+// (movers, which may overlap with anomalies) that give Claude context
+// even for shifts that didn't cross the alert threshold.
+func selectAnomaliesAndMovers(stats []EventAnomaly) (anomalies, movers []EventAnomaly) {
+	sort.Slice(stats, func(i, j int) bool {
+		return math.Abs(stats[i].ModifiedZScore) > math.Abs(stats[j].ModifiedZScore)
+	})
+
+	anomalies = make([]EventAnomaly, 0)
+	for _, s := range stats {
+		if math.Abs(s.ModifiedZScore) > anomalyZThreshold {
+			anomalies = append(anomalies, s)
+		}
+	}
+	movers = stats
+	if len(movers) > topMoversLimit {
+		movers = movers[:topMoversLimit]
+	}
+	return anomalies, movers
+}
+
+// narrateDigest sends the pre-computed signals to Claude and returns its
+// three-sentence narration.
+func narrateDigest(ctx context.Context, client *anthropic.Client, anomalies, movers []EventAnomaly) (string, error) {
 	payload, err := json.Marshal(struct {
 		Anomalies []EventAnomaly `json:"anomalies"`
 		TopMovers []EventAnomaly `json:"top_movers"`
 	}{anomalies, movers})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
@@ -87,10 +105,10 @@ func GetDigest(ctx context.Context, pool *pgxpool.Pool, client *anthropic.Client
 		},
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if resp.StopReason == anthropic.StopReasonRefusal {
-		return nil, fmt.Errorf("digest narration declined")
+		return "", fmt.Errorf("digest narration declined")
 	}
 
 	var narration string
@@ -99,6 +117,5 @@ func GetDigest(ctx context.Context, pool *pgxpool.Pool, client *anthropic.Client
 			narration += text.Text
 		}
 	}
-
-	return &DigestResult{Narration: narration, Anomalies: anomalies, TopMovers: movers}, nil
+	return narration, nil
 }

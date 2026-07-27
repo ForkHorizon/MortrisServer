@@ -53,9 +53,7 @@ type Server struct {
 	Log           *slog.Logger
 	LoginThrottle *adminauth.Throttle
 	SDKTest       *sdktest.Controller
-	// Anthropic is nil unless ANTHROPIC_API_KEY is set — the digest
-	// (Phase 5 #3) and NL query (Phase 5 #4) endpoints report
-	// analytics.ErrAIUnavailable in that case.
+	// Anthropic is nil unless ANTHROPIC_API_KEY is set — digest/NL query then report analytics.ErrAIUnavailable.
 	Anthropic *anthropic.Client
 
 	sem                 chan struct{}

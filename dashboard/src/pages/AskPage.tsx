@@ -3,16 +3,51 @@ import { apiPost, ApiError } from '../api/client'
 import type { NLQueryResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 
+function AskResult({ result }: { result: NLQueryResult }) {
+  const filters = Object.entries(result.interpreted_params)
+    .map(([k, v]) => `${k}=${v.join(',')}`)
+    .join(', ')
+  return (
+    <div className="ask-result">
+      <p>
+        Interpreted as <strong>{result.endpoint}</strong> with {filters || 'no extra filters'}
+      </p>
+      <pre>{JSON.stringify(result.result, null, 2)}</pre>
+    </div>
+  )
+}
+
+function AskForm({ onAsk, loading }: { onAsk: (question: string) => void; loading: boolean }) {
+  const [question, setQuestion] = useState('')
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (question.trim()) onAsk(question)
+  }
+  return (
+    <form onSubmit={submit} className="field">
+      <label htmlFor="ask-question">Question</label>
+      <input
+        id="ask-question"
+        type="text"
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        placeholder="e.g. how many level_end events on iOS in the last 7 days?"
+        size={60}
+      />
+      <button type="submit" disabled={loading || !question.trim()}>
+        {loading ? 'Asking…' : 'Ask'}
+      </button>
+    </form>
+  )
+}
+
 export function AskPage() {
   const { currentProject } = useAuth()
-  const [question, setQuestion] = useState('')
   const [result, setResult] = useState<NLQueryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const ask = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!question.trim()) return
+  const ask = (question: string) => {
     setLoading(true)
     setError(null)
     setResult(null)
@@ -32,34 +67,9 @@ export function AskPage() {
         (overview, event counts, recent events, funnel, retention) and validated exactly like the
         manual filters on those pages. Nothing you type ever reaches SQL directly.
       </p>
-      <form onSubmit={ask} className="field">
-        <label htmlFor="ask-question">Question</label>
-        <input
-          id="ask-question"
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="e.g. how many level_end events on iOS in the last 7 days?"
-          size={60}
-        />
-        <button type="submit" disabled={loading || !question.trim()}>
-          {loading ? 'Asking…' : 'Ask'}
-        </button>
-      </form>
+      <AskForm onAsk={ask} loading={loading} />
       {error && <p role="alert">{error}</p>}
-      {result && (
-        <div className="ask-result">
-          <p>
-            Interpreted as <strong>{result.endpoint}</strong> with{' '}
-            {Object.keys(result.interpreted_params).length === 0
-              ? 'no extra filters'
-              : Object.entries(result.interpreted_params)
-                  .map(([k, v]) => `${k}=${v.join(',')}`)
-                  .join(', ')}
-          </p>
-          <pre>{JSON.stringify(result.result, null, 2)}</pre>
-        </div>
-      )}
+      {result && <AskResult result={result} />}
     </section>
   )
 }

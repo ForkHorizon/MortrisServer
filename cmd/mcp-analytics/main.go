@@ -66,7 +66,7 @@ func (c *apiClient) login(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
@@ -115,7 +115,7 @@ func (c *apiClient) get(ctx context.Context, path string, params url.Values) (st
 			return "", err
 		}
 		b, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return "", err
 		}
@@ -202,21 +202,24 @@ type funnelArgs struct {
 	WindowSeconds int    `json:"window_seconds,omitempty" jsonschema:"max 86400, default 24h completion window"`
 }
 
-func main() {
-	client, err := newAPIClient()
-	if err != nil {
-		log.Fatal(err)
-	}
+func registerTools(server *mcp.Server, client *apiClient) {
+	registerOverviewTool(server, client)
+	registerEventCountsTool(server, client)
+	registerRecentEventsTool(server, client)
+	registerFunnelTool(server, client)
+	registerRetentionTool(server, client)
+}
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "mortris-analytics", Version: "0.1.0"}, nil)
-
+func registerOverviewTool(server *mcp.Server, client *apiClient) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "overview",
 		Description: "Project-wide event overview for a date range: totals, active installations, daily trend.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args dateRangeArgs) (*mcp.CallToolResult, any, error) {
 		return call(ctx, client, "/api/v1/analytics/overview", args.params())
 	})
+}
 
+func registerEventCountsTool(server *mcp.Server, client *apiClient) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "event_counts",
 		Description: "Event counts and daily trend for a date range, optionally filtered by event name, app version, build, platform, or one cataloged property.",
@@ -233,7 +236,9 @@ func main() {
 		setIf(v, "property_value", args.PropertyValue)
 		return call(ctx, client, "/api/v1/analytics/events", v)
 	})
+}
 
+func registerRecentEventsTool(server *mcp.Server, client *apiClient) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "recent_events",
 		Description: "Live tail of the most recent raw events, newest first, optionally filtered and keyset-paginated.",
@@ -250,7 +255,9 @@ func main() {
 		setIf(v, "before_event_id", args.BeforeEventID)
 		return call(ctx, client, "/api/v1/analytics/events/recent", v)
 	})
+}
 
+func registerFunnelTool(server *mcp.Server, client *apiClient) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "funnel",
 		Description: "Step-by-step conversion funnel over 2-5 cataloged product events within a completion window.",
@@ -263,13 +270,25 @@ func main() {
 		}
 		return call(ctx, client, "/api/v1/analytics/funnel", v)
 	})
+}
 
+func registerRetentionTool(server *mcp.Server, client *apiClient) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "retention",
 		Description: "Cohort retention (day-N return rate) for installations first seen in the given date range.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args dateRangeArgs) (*mcp.CallToolResult, any, error) {
 		return call(ctx, client, "/api/v1/analytics/retention", args.params())
 	})
+}
+
+func main() {
+	client, err := newAPIClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "mortris-analytics", Version: "0.1.0"}, nil)
+	registerTools(server, client)
 
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatalf("server failed: %v", err)
