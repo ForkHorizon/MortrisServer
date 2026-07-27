@@ -73,6 +73,36 @@ func (s *Server) handleEventExplorer(w http.ResponseWriter, r *http.Request, ses
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
 
+func (s *Server) handlePropertyValues(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID := newRequestID()
+	start := time.Now()
+
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	from, to, err := analytics.ParseDateRange(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	filter, err := analytics.ParsePropertyValuesFilter(r.Context(), s.ReaderPool, projectID, r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	result, err := analytics.GetPropertyValues(r.Context(), s.ReaderPool, projectID, filter, from, to)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 func (s *Server) handleRecentEvents(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID := newRequestID()
 	start := time.Now()
