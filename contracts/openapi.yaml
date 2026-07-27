@@ -270,6 +270,19 @@ components:
               day: { type: string, format: date }
               count: { type: integer }
 
+    PropertyValuesResult:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: array
+          items:
+            type: object
+            required: [value, count]
+            properties:
+              value: { type: string }
+              count: { type: integer }
+
     FunnelResult:
       type: object
       required: [steps, completion_window_seconds, truncated]
@@ -655,6 +668,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EventExplorerResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/v1/analytics/events/property-values:
+    get:
+      summary: Property Value Inspector — top values by count for a cataloged event+property pair (plan item 2b)
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: name
+          in: query
+          required: true
+          description: Must be a name in the project's event catalog (or a reserved system event).
+          schema: { type: string }
+        - name: property_key
+          in: query
+          required: true
+          description: Must be declared in that event's catalog entry.
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropertyValuesResult" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }

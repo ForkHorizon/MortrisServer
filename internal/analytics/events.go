@@ -38,14 +38,8 @@ func ParseEventExplorerFilter(ctx context.Context, pool *pgxpool.Pool, projectID
 	}
 
 	if f.Name != nil {
-		if !contracts.ReservedSystemEvents[*f.Name] {
-			var exists bool
-			if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM event_catalog WHERE project_id = $1 AND name = $2)`, projectID, *f.Name).Scan(&exists); err != nil {
-				return f, err
-			}
-			if !exists {
-				return f, apierr.New(400, contracts.CodeInvalidRequest, "unknown event name: "+*f.Name)
-			}
+		if err := validateEventName(ctx, pool, projectID, *f.Name); err != nil {
+			return f, err
 		}
 	}
 
@@ -53,22 +47,48 @@ func ParseEventExplorerFilter(ctx context.Context, pool *pgxpool.Pool, projectID
 		if f.Name == nil {
 			return f, apierr.New(400, contracts.CodeInvalidRequest, "property_key filter requires a name filter (properties are defined per event)")
 		}
-		var exists bool
-		if err := pool.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM event_catalog, jsonb_array_elements(properties) p
-				WHERE project_id = $1 AND name = $2 AND p->>'name' = $3
-			)
-		`, projectID, *f.Name, *propKey).Scan(&exists); err != nil {
+		if err := validateCatalogProperty(ctx, pool, projectID, *f.Name, *propKey); err != nil {
 			return f, err
-		}
-		if !exists {
-			return f, apierr.New(400, contracts.CodeInvalidRequest, "property is not in the event catalog: "+*propKey)
 		}
 		f.PropertyKey, f.PropertyValue = propKey, propValue
 	}
 
 	return f, nil
+}
+
+// validateEventName allowlists a name against the project's event catalog
+// (reserved system events are exempt). Shared by the Event Explorer's
+// optional name filter and the Property Value Inspector's required one.
+func validateEventName(ctx context.Context, pool *pgxpool.Pool, projectID, name string) error {
+	if contracts.ReservedSystemEvents[name] {
+		return nil
+	}
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM event_catalog WHERE project_id = $1 AND name = $2)`, projectID, name).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return apierr.New(400, contracts.CodeInvalidRequest, "unknown event name: "+name)
+	}
+	return nil
+}
+
+// validateCatalogProperty allowlists a property key against the given
+// event's declared catalog properties.
+func validateCatalogProperty(ctx context.Context, pool *pgxpool.Pool, projectID, name, key string) error {
+	var exists bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM event_catalog, jsonb_array_elements(properties) p
+			WHERE project_id = $1 AND name = $2 AND p->>'name' = $3
+		)
+	`, projectID, name, key).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return apierr.New(400, contracts.CodeInvalidRequest, "property is not in the event catalog: "+key)
+	}
+	return nil
 }
 
 type DayCount struct {
