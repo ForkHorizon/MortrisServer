@@ -34,6 +34,13 @@ export function GameplayDiagnosticsPage() {
         <StatTile label="Breaks" value={diagnostics.data.summary.pause_count} />
         <StatTile label="Hints" value={diagnostics.data.summary.hints} />
       </StatGrid>
+      <p>Active and wall time above cover completed and given-up attempts only — see the breakdown below for attempts still in progress or lost.</p>
+      <DataTable caption="Attempts by outcome" rows={diagnostics.data.summary.by_outcome ?? []} getRowKey={(r) => r.outcome} columns={[
+        { key: 'outcome', label: 'Outcome' }, { key: 'attempts', label: 'Attempts' },
+        { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
+        { key: 'wall_elapsed_ms', label: 'Wall', render: (r) => duration(r.wall_elapsed_ms) },
+        { key: 'pause_count', label: 'Breaks' },
+      ]} />
       <DataTable caption="City, house, and wave outcomes" rows={diagnostics.data.scopes} getRowKey={(r) => `${r.city_id}-${r.house_id}-${r.wave_index}`} columns={[
         { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' }, { key: 'attempts', label: 'Attempts' },
         { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' }, { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
