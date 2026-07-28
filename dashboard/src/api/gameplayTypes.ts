@@ -2,6 +2,18 @@
 // that file under the repo's line-count gate; a self-contained domain
 // with no other cross-references.
 
+// One outcome bucket (completed / gave_up / in_progress / lost) — see
+// GameplaySummary.active_elapsed_ms for why durations are only
+// meaningful once an attempt has settled.
+export interface GameplayOutcomeStat {
+  outcome: string
+  attempts: number
+  active_elapsed_ms: number
+  wall_elapsed_ms: number
+  pause_count: number
+  pause_elapsed_ms: number
+}
+
 export interface GameplaySummary {
   attempts: number
   placements: number
@@ -9,10 +21,15 @@ export interface GameplaySummary {
   hints: number
   completed_waves: number
   completed_houses: number
+  // Summed over completed + gave_up attempts only — an attempt that's
+  // still in progress or was silently lost (see by_outcome) doesn't have
+  // a final duration yet.
   active_elapsed_ms: number
   wall_elapsed_ms: number
   pause_count: number
   pause_elapsed_ms: number
+  // Only present on the top-level summary, not per-scope breakdowns.
+  by_outcome?: GameplayOutcomeStat[]
 }
 
 export interface GameplayScope extends GameplaySummary {
