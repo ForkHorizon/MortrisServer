@@ -3,21 +3,21 @@ import { ApiError, apiDelete, apiGet, apiPost } from '../api/client'
 import type { PolicyRule } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { DataTable } from '../components/DataTable'
+import { Freshness } from '../components/Freshness'
 import { useApiData } from '../hooks/useApiData'
 
 const MODES: PolicyRule['mode'][] = ['active', 'pause_upload', 'disable_collection']
 
 export function PolicyAdminPage() {
   const { currentProject, session } = useAuth()
-  const { rules, error, loading, refresh } = usePolicyRules(currentProject)
+  const { rules, error, loading, updatedAt, stale, refresh } = usePolicyRules(currentProject)
   const isAdmin = session?.role === 'owner' || session?.projects.find((project) => project.id === currentProject)?.role === 'project_admin'
   if (!currentProject) return <p>Select a project to administer its kill switch.</p>
   return (
     <section aria-labelledby="policy-heading">
       <h1 id="policy-heading">Policy administration (kill switch)</h1>
       <p>Rules target project, environment, app version, build number, or SDK version — the most specific enabled rule wins. Leave a field blank to match any value.</p>
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       <PolicyRuleTable rules={rules} canEdit={isAdmin} projectID={currentProject} refresh={refresh} />
       {isAdmin ? <PolicyRuleForm projectID={currentProject} refresh={refresh} /> : <p>Viewing only — creating or removing rules requires project-admin access.</p>}
     </section>
@@ -30,8 +30,8 @@ function usePolicyRules(currentProject: string) {
     void refreshKey
     return apiGet<{ rules: PolicyRule[] }>('/api/v1/policy', { project: currentProject })
   }, [currentProject, refreshKey])
-  const { data, error, loading } = useApiData(fetchPolicyRules)
-  return { rules: data?.rules ?? [], error, loading, refresh: setRefreshKey }
+  const { data, error, loading, updatedAt, stale } = useApiData(fetchPolicyRules, `policy:${currentProject}`)
+  return { rules: data?.rules ?? [], error, loading, updatedAt, stale, refresh: setRefreshKey }
 }
 
 function PolicyRuleTable({ rules, canEdit, projectID, refresh }: { rules: PolicyRule[]; canEdit: boolean; projectID: string; refresh: React.Dispatch<React.SetStateAction<number>> }) {

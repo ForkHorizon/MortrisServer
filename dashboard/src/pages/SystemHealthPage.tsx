@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { SystemHealth } from '../api/types'
 import { useApiData } from '../hooks/useApiData'
+import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { DataTable } from '../components/DataTable'
 
@@ -15,13 +16,12 @@ const DISK_STATE_LABEL: Record<SystemHealth['disk_state'], string> = {
 
 export function SystemHealthPage() {
   const fetchSystemHealth = useCallback(() => apiGet<SystemHealth>('/api/v1/system'), [])
-  const { data, error, loading } = useApiData<SystemHealth>(fetchSystemHealth)
+  const { data, error, loading, updatedAt, stale } = useApiData<SystemHealth>(fetchSystemHealth, 'system-health')
 
   return (
     <section aria-labelledby="system-heading">
       <h1 id="system-heading">System health</h1>
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       {data && (
         <>
           {data.disk_state !== 'normal' && (

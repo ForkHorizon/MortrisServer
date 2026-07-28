@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { ApiError, apiDelete, apiGet, apiPost } from '../api/client'
 import type { ManagedProject } from '../api/types'
+import { Freshness } from '../components/Freshness'
 import { useApiData } from '../hooks/useApiData'
 
 type ProjectList = { projects: ManagedProject[] }
@@ -12,7 +13,7 @@ const SDK_SCENARIOS = [
 ] as const
 
 export function ProjectsPage() {
-  const { active, archived, loading, refresh } = useProjectList()
+  const { active, archived, loading, updatedAt, stale, refresh } = useProjectList()
   const [error, setError] = useState<string | null>(null)
   const actions = projectActions(refresh, setError)
   return (
@@ -21,7 +22,7 @@ export function ProjectsPage() {
       <p>Create projects here. Their generated ID is immutable and is the value used by the SDK.</p>
       <ProjectCreateForm refresh={refresh} setError={setError} />
       {error && <p role="alert" className="error-text">{error}</p>}
-      {loading && <p role="status">Loading projects…</p>}
+      <Freshness loading={loading} stale={stale} updatedAt={updatedAt} loadingLabel="Loading projects…" />
       <ProjectLists active={active} archived={archived} {...actions} />
     </section>
   )
@@ -33,8 +34,8 @@ function useProjectList() {
     void refreshKey
     return Promise.all([apiGet<ProjectList>('/api/v1/projects'), apiGet<ProjectList>('/api/v1/projects', { archived: 'true' })])
   }, [refreshKey])
-  const { data, loading } = useApiData(load)
-  return { active: data?.[0].projects ?? [], archived: data?.[1].projects ?? [], loading, refresh: setRefreshKey }
+  const { data, loading, updatedAt, stale } = useApiData(load, 'projects')
+  return { active: data?.[0].projects ?? [], archived: data?.[1].projects ?? [], loading, updatedAt, stale, refresh: setRefreshKey }
 }
 
 function ProjectCreateForm({ refresh, setError }: { refresh: Refresh; setError: Dispatch<SetStateAction<string | null>> }) {

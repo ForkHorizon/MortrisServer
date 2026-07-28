@@ -6,6 +6,7 @@ import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
+import { Freshness } from '../components/Freshness'
 import { DataTable, type Column } from '../components/DataTable'
 import { TrendChart } from '../components/TrendChart'
 import { Entity } from '../components/Entity'
@@ -153,7 +154,10 @@ export function FunnelPage() {
     [canQuery, currentProject, range.params.from, range.params.to, steps, windowSeconds],
   )
 
-  const { data, error, loading } = useApiData<FunnelResult>(fetchFunnel)
+  const { data, error, loading, updatedAt, stale } = useApiData<FunnelResult>(
+    fetchFunnel,
+    `funnel:${currentProject}:${range.params.from}:${range.params.to}:${steps.join(',')}:${windowSeconds}`,
+  )
 
   if (!currentProject) return <p>Select a project to build a funnel.</p>
 
@@ -171,8 +175,7 @@ export function FunnelPage() {
       />
 
       {!canQuery && <p>Enter 2 to 5 step names to run the funnel.</p>}
-      {canQuery && loading && <p role="status">Loading…</p>}
-      {canQuery && error && <p role="alert">{error}</p>}
+      {canQuery && <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />}
       {canQuery && data && <FunnelResults data={data} />}
     </section>
   )

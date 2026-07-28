@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth'
 import { useRecentEventsFeed } from '../hooks/useRecentEventsFeed'
 import { useURLParams } from '../hooks/useURLParams'
 import { EventSelect } from '../components/EventSelect'
+import { Freshness } from '../components/Freshness'
 import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
 
@@ -80,7 +81,7 @@ export function EventFeedPage() {
   const setAppVersion = (v: string) => set('app_version', v)
   const setInstallId = (v: string) => set('install_id', v)
   const [paused, setPaused] = useState(false)
-  const { events, error, loading, hasMore, loadOlder } = useRecentEventsFeed(
+  const { events, error, loading, updatedAt, stale, hasMore, loadOlder } = useRecentEventsFeed(
     currentProject,
     { name, platform, appVersion, installId },
     paused,
@@ -106,8 +107,7 @@ export function EventFeedPage() {
         {paused ? 'Resume' : 'Pause'}
       </button>
 
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       <DataTable caption="Most recent events" columns={feedColumns} rows={events} getRowKey={(r) => r.event_id} />
       {hasMore && (
         <button type="button" onClick={loadOlder}>

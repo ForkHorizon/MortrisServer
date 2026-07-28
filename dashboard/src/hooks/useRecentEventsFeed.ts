@@ -29,6 +29,8 @@ export function useRecentEventsFeed(currentProject: string, filters: RecentEvent
   const [cursor, setCursor] = useState<{ receivedAt?: string; eventId?: string }>({})
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
+  const [stale, setStale] = useState(false)
   const { name, platform, appVersion, installId } = filters
 
   const refresh = useCallback(() => {
@@ -38,8 +40,15 @@ export function useRecentEventsFeed(currentProject: string, filters: RecentEvent
         setEvents(res.events)
         setCursor({ receivedAt: res.next_before_received_at, eventId: res.next_before_event_id })
         setError(null)
+        setStale(false)
+        setUpdatedAt(Date.now())
       })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : 'Something went wrong.'))
+      .catch((e: unknown) => {
+        // A failed poll leaves the previous events on screen — mark them
+        // stale rather than let a silently-outdated feed look live.
+        setError(e instanceof ApiError ? e.message : 'Something went wrong.')
+        setStale(true)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filters destructured above so deps stay primitive
   }, [currentProject, name, platform, appVersion, installId])
 
@@ -68,5 +77,5 @@ export function useRecentEventsFeed(currentProject: string, filters: RecentEvent
     })
   }
 
-  return { events, error, loading, hasMore: Boolean(cursor.receivedAt), loadOlder }
+  return { events, error, loading, updatedAt, stale, hasMore: Boolean(cursor.receivedAt), loadOlder }
 }

@@ -7,6 +7,7 @@ import { useDateRange } from '../hooks/useDateRange'
 import { useURLParams } from '../hooks/useURLParams'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
+import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
@@ -121,15 +122,17 @@ function PropertyValueInspector({ name, propertyKey, propertyValue, onPickValue,
     () => apiGet<PropertyValuesResult>('/api/v1/analytics/events/property-values', { project: currentProject, name, property_key: propertyKey, from, to }),
     [currentProject, name, propertyKey, from, to],
   )
-  const { data, error, loading } = useApiData<PropertyValuesResult>(fetchValues)
+  const { data, error, loading, updatedAt, stale } = useApiData<PropertyValuesResult>(
+    fetchValues,
+    `property-values:${currentProject}:${name}:${propertyKey}:${from}:${to}`,
+  )
 
   return (
     <section aria-labelledby="property-values-heading">
       <h2 id="property-values-heading">
         Top values for {name}.{propertyKey}
       </h2>
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       {data && <PropertyValueTable values={data.values} propertyValue={propertyValue} onPickValue={onPickValue} />}
     </section>
   )
@@ -164,7 +167,7 @@ export function EventExplorerPage() {
   const { name, appVersion, buildNumber, platform, propertyKey, propertyValue } = filters
 
   const fetchCatalog = useCallback(() => apiGet<CatalogResult>('/api/v1/analytics/catalog', { project: currentProject }), [currentProject])
-  const { data: catalog } = useApiData<CatalogResult>(fetchCatalog)
+  const { data: catalog } = useApiData<CatalogResult>(fetchCatalog, `catalog:${currentProject}`)
   const propertyOptions = useMemo(() => catalog?.entries.find((e) => e.name === name)?.properties.map((p) => p.name) ?? [], [catalog, name])
 
   const fetchEvents = useCallback(
@@ -186,7 +189,10 @@ export function EventExplorerPage() {
     [currentProject, from, to, timezone, name, appVersion, buildNumber, platform, propertyKey, propertyValue],
   )
 
-  const { data, error, loading } = useApiData<EventExplorerResult>(fetchEvents)
+  const { data, error, loading, updatedAt, stale } = useApiData<EventExplorerResult>(
+    fetchEvents,
+    `events:${currentProject}:${from}:${to}:${timezone}:${name}:${appVersion}:${buildNumber}:${platform}:${propertyValue ? propertyKey : ''}:${propertyValue}`,
+  )
 
   if (!currentProject) return <p>Select a project to explore its events.</p>
 
@@ -195,8 +201,7 @@ export function EventExplorerPage() {
       <h1 id="events-heading">Event Explorer</h1>
       <DateRangeFields range={range} />
       <EventExplorerFilters {...filters} propertyOptions={propertyOptions} />
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       {data && <EventExplorerResults data={data} />}
       {name && propertyKey && (
         <PropertyValueInspector name={name} propertyKey={propertyKey} propertyValue={propertyValue} onPickValue={(v) => filters.setPropertyValue(v === propertyValue ? '' : v)} from={from} to={to} />

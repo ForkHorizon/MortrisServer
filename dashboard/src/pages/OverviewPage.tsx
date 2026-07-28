@@ -2,10 +2,11 @@ import { useCallback } from 'react'
 import { apiGet } from '../api/client'
 import type { EventAnomaly, Overview, OverviewDaily } from '../api/types'
 import { useAuth } from '../auth/useAuth'
-import { useApiData } from '../hooks/useApiData'
+import { combineFreshness, useApiData } from '../hooks/useApiData'
 import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { AnomalyBadge } from '../components/AnomalyBadge'
@@ -89,19 +90,24 @@ export function OverviewPage() {
     [currentProject, from, to, timezone],
   )
 
-  const { data, error, loading } = useApiData<Overview>(fetchOverview)
-  const { data: anomalies } = useAnomalies(currentProject)
+  const overview = useApiData<Overview>(fetchOverview, `overview:${currentProject}:${from}:${to}:${timezone}`)
+  const { data } = overview
+  const anomalies = useAnomalies(currentProject)
 
   if (!currentProject) return <p>Select a project to view its overview.</p>
+
+  // One combined stamp for the banner + tiles below: always the older of
+  // the two fetches, so the page never implies the anomaly banner is
+  // fresher (or staler) than the stats sitting right under it.
+  const freshness = combineFreshness(overview, anomalies)
 
   return (
     <section aria-labelledby="overview-heading">
       <h1 id="overview-heading">Overview</h1>
-      {anomalies && <AnomaliesBanner anomalies={anomalies.anomalies} />}
+      {anomalies.data && <AnomaliesBanner anomalies={anomalies.data.anomalies} />}
       <DigestPanel projectID={currentProject} />
       <DateRangeFields range={range} />
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness {...freshness} />
       {data && <OverviewStats data={data} />}
       {data && <OverviewEventsByKindChart data={data} />}
     </section>
