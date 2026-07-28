@@ -53,12 +53,15 @@ export interface OverviewDaily {
   ingestion_accepted: number
   ingestion_duplicates: number
   ingestion_rejected: number
+  // True when this day is today (still accumulating events, not complete).
+  partial?: boolean
 }
 
 export interface EventKindDay {
   day: string
   product: number
   system: number
+  partial?: boolean
 }
 
 export interface Overview {
@@ -72,19 +75,25 @@ export interface Overview {
   ingestion_accepted: number
   ingestion_duplicates: number
   ingestion_rejected: number
+  ingestion_rejection_rate: number
   daily: OverviewDaily[]
   events_by_kind: EventKindDay[]
+  truncated: boolean
+  untrusted_pct: number
 }
 
 export interface DayCount {
   day: string
   count: number
+  partial?: boolean
 }
 
 export interface EventExplorerResult {
   total_events: number
   active_installations: number
   trend: DayCount[]
+  truncated: boolean
+  untrusted_pct: number
 }
 
 export interface FunnelStep {
@@ -151,6 +160,7 @@ export interface CatalogEntry {
 
 export interface CatalogResult {
   entries: CatalogEntry[]
+  untrusted_pct: number
 }
 
 export interface EventAnomaly {
@@ -235,6 +245,7 @@ export interface SystemHealth {
   disk_state: 'normal' | 'warning' | 'high' | 'critical' | 'rejecting'
   ingestion_accepted_last_hour: number
   ingestion_rejected_last_hour: number
+  ingestion_rejected_last_hour_rate: number
   enabled_policy_rules: number
   last_maintenance_runs: MaintenanceRunSummary[]
 }

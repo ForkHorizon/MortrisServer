@@ -11,6 +11,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { Sparkline } from '../components/Sparkline'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { Entity } from '../components/Entity'
+import { TimeQualityNote } from '../components/TimeQualityNote'
 
 type SortKey = 'name' | 'count'
 
@@ -56,7 +57,7 @@ function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<Cata
   },
   {
     key: 'last_seen_at',
-    label: 'Last seen',
+    label: 'Last seen (browser time)',
     render: (r) => (r.last_seen_at ? new Date(r.last_seen_at).toLocaleString() : '—'),
   },
   ]
@@ -110,6 +111,7 @@ export function CatalogPage() {
       <DateRangeFields range={range} />
       <SortControls sortKey={sortKey} setSortKey={setSortKey} />
       <Freshness {...freshness} />
+      {data && <TimeQualityNote pct={data.untrusted_pct} />}
       {data && (
         <DataTable
           caption="Declared and auto-discovered events, with volume for the selected range"

@@ -69,7 +69,7 @@ func computeEventStats(ctx context.Context, pool *pgxpool.Pool, projectID string
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	windowStart := today.AddDate(0, 0, -anomalyBaselineDays)
 
-	counts, err := queryDailyCounts(ctx, pool, projectID, loc, windowStart, today)
+	counts, err := queryDailyCounts(ctx, pool, projectID, loc, windowStart, today, now)
 	if err != nil {
 		return nil, err
 	}
@@ -89,13 +89,19 @@ func computeEventStats(ctx context.Context, pool *pgxpool.Pool, projectID string
 
 // queryDailyCounts buckets each event name's raw event count into local
 // calendar days (in loc) over [windowStart, today], inclusive of today.
-func queryDailyCounts(ctx context.Context, pool *pgxpool.Pool, projectID string, loc *time.Location, windowStart, today time.Time) (map[string]map[string]int64, error) {
+// Today is naturally partial (it can't have future events), so every
+// baseline day is truncated to the same wall-clock cutoff as `now` —
+// otherwise a partial "today" reads as an anomalous dip against full
+// baseline days it was never going to match.
+func queryDailyCounts(ctx context.Context, pool *pgxpool.Pool, projectID string, loc *time.Location, windowStart, today, now time.Time) (map[string]map[string]int64, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT name, (effective_at AT TIME ZONE $4)::date AS day, COUNT(*) AS cnt
 		FROM events
 		WHERE project_id = $1 AND effective_at >= $2 AND effective_at < $3
+		  AND ((effective_at AT TIME ZONE $4)::date = $5::date
+		       OR (effective_at AT TIME ZONE $4)::time < $6::time)
 		GROUP BY name, day
-	`, projectID, windowStart, today.AddDate(0, 0, 1), loc.String())
+	`, projectID, windowStart, today.AddDate(0, 0, 1), loc.String(), today, now.Format("15:04:05"))
 	if err != nil {
 		return nil, err
 	}

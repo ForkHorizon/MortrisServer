@@ -25,6 +25,10 @@ export function DateRangeFields({ range }: { range: ReturnType<typeof useDateRan
           IANA name, e.g. America/New_York
         </span>
       </div>
+      <p className="hint">
+        Days below are calendar days in {range.timezone}, from and to local midnight. The most recent day may be
+        partial if it's still in progress.
+      </p>
     </fieldset>
   )
 }

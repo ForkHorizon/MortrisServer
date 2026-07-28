@@ -254,6 +254,9 @@ components:
         ingestion_accepted: { type: integer }
         ingestion_duplicates: { type: integer }
         ingestion_rejected: { type: integer }
+        ingestion_rejection_rate: { type: number, description: "ingestion_rejected / (accepted + duplicates + rejected), 0-100." }
+        truncated: { type: boolean, description: "true if events_by_kind hit its internal 92-day cap and may be missing days." }
+        untrusted_pct: { type: number, description: "Share of product events in range with time_quality = untrusted, 0-100." }
         daily:
           description: Trailing 7 days of the same metrics, oldest first, for stat-tile sparklines.
           type: array
@@ -271,6 +274,7 @@ components:
               ingestion_accepted: { type: integer }
               ingestion_duplicates: { type: integer }
               ingestion_rejected: { type: integer }
+              partial: { type: boolean, description: "true when this day is today — still accumulating events, not a complete day." }
         events_by_kind:
           description: Product/system event split per day over the selected range.
           type: array
@@ -280,13 +284,16 @@ components:
               day: { type: string, format: date }
               product: { type: integer }
               system: { type: integer }
+              partial: { type: boolean, description: "true when this day is today — still accumulating events, not a complete day." }
 
     EventExplorerResult:
       type: object
-      required: [total_events, active_installations, trend]
+      required: [total_events, active_installations, trend, truncated]
       properties:
         total_events: { type: integer }
         active_installations: { type: integer }
+        truncated: { type: boolean, description: "true if the trend hit its internal 92-day cap and may be missing days." }
+        untrusted_pct: { type: number, description: "Share of matching events in range with time_quality = untrusted, 0-100." }
         trend:
           type: array
           items:
@@ -295,6 +302,7 @@ components:
             properties:
               day: { type: string, format: date }
               count: { type: integer }
+              partial: { type: boolean, description: "true when this day is today — still accumulating events, not a complete day." }
 
     PropertyValuesResult:
       type: object
@@ -418,6 +426,7 @@ components:
       type: object
       required: [entries]
       properties:
+        untrusted_pct: { type: number, description: "Share of events in range, across all names, with time_quality = untrusted, 0-100." }
         entries:
           type: array
           items:
@@ -443,6 +452,7 @@ components:
                   properties:
                     day: { type: string, format: date }
                     count: { type: integer }
+                    partial: { type: boolean, description: "true when this day is today — still accumulating events, not a complete day." }
 
     RecentEventsResult:
       type: object
@@ -480,6 +490,7 @@ components:
         disk_state: { type: string, enum: [normal, warning, high, critical, rejecting] }
         ingestion_accepted_last_hour: { type: integer }
         ingestion_rejected_last_hour: { type: integer }
+        ingestion_rejected_last_hour_rate: { type: number, description: "ingestion_rejected_last_hour / (accepted + rejected) over the last hour, 0-100." }
         enabled_policy_rules: { type: integer }
         writer_pool: { $ref: "#/components/schemas/PoolStats" }
         reader_pool: { $ref: "#/components/schemas/PoolStats" }

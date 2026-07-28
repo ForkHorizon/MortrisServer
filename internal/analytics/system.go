@@ -40,15 +40,18 @@ type MaintenanceRunSummary struct {
 }
 
 type SystemHealth struct {
-	Version                   string                  `json:"version"`
-	DBLatencyMs               float64                 `json:"db_latency_ms"`
-	WriterPool                PoolStats               `json:"writer_pool"`
-	ReaderPool                PoolStats               `json:"reader_pool"`
-	DiskState                 diskstate.State         `json:"disk_state"`
-	IngestionAcceptedLastHour int64                   `json:"ingestion_accepted_last_hour"`
-	IngestionRejectedLastHour int64                   `json:"ingestion_rejected_last_hour"`
-	EnabledPolicyRules        int64                   `json:"enabled_policy_rules"`
-	LastMaintenanceRuns       []MaintenanceRunSummary `json:"last_maintenance_runs"`
+	Version                   string          `json:"version"`
+	DBLatencyMs               float64         `json:"db_latency_ms"`
+	WriterPool                PoolStats       `json:"writer_pool"`
+	ReaderPool                PoolStats       `json:"reader_pool"`
+	DiskState                 diskstate.State `json:"disk_state"`
+	IngestionAcceptedLastHour int64           `json:"ingestion_accepted_last_hour"`
+	IngestionRejectedLastHour int64           `json:"ingestion_rejected_last_hour"`
+	// IngestionRejectedLastHourRate is rejected / (accepted + rejected)
+	// over the last hour — the raw rejected count has no denominator on its own.
+	IngestionRejectedLastHourRate float64                 `json:"ingestion_rejected_last_hour_rate"`
+	EnabledPolicyRules            int64                   `json:"enabled_policy_rules"`
+	LastMaintenanceRuns           []MaintenanceRunSummary `json:"last_maintenance_runs"`
 }
 
 // GetSystemHealth implements section 10.2 #7. projectIDs scopes the
@@ -81,6 +84,9 @@ func GetSystemHealth(ctx context.Context, writerPool, readerPool *pgxpool.Pool, 
 			WHERE project_id = ANY($1) AND received_at >= clock_timestamp() - interval '1 hour'
 		`, projectIDs).Scan(&health.IngestionAcceptedLastHour, &health.IngestionRejectedLastHour); err != nil {
 			return nil, err
+		}
+		if attempted := health.IngestionAcceptedLastHour + health.IngestionRejectedLastHour; attempted > 0 {
+			health.IngestionRejectedLastHourRate = float64(health.IngestionRejectedLastHour) / float64(attempted) * 100
 		}
 
 		if err := readerPool.QueryRow(ctx, `

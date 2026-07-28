@@ -12,6 +12,7 @@ import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
 import { CopyButton } from '../components/Entity'
+import { TimeQualityNote } from '../components/TimeQualityNote'
 
 // Only used by the Property Value Inspector below — kept local instead
 // of growing the shared api/types.ts for a single consumer.
@@ -138,18 +139,26 @@ function PropertyValueInspector({ name, propertyKey, propertyValue, onPickValue,
   )
 }
 
-function EventExplorerResults({ data }: { data: EventExplorerResult }) {
+function EventExplorerResults({ data, timezone }: { data: EventExplorerResult; timezone: string }) {
   return (
     <>
+      {data.truncated && (
+        <p role="alert">This trend hit its internal 92-day cap and may be missing days — narrow the date range.</p>
+      )}
+      <TimeQualityNote pct={data.untrusted_pct} />
       <StatGrid>
         <StatTile label="Total events" value={data.total_events} />
         <StatTile label="Active installations" value={data.active_installations} />
       </StatGrid>
-      <TrendChart categories={data.trend.map((d) => d.day)} series={[{ name: 'Events', data: data.trend.map((d) => d.count) }]} label="Events" />
+      <TrendChart
+        categories={data.trend.map((d) => (d.partial ? `${d.day} (partial)` : d.day))}
+        series={[{ name: 'Events', data: data.trend.map((d) => d.count) }]}
+        label={`Events by day (${timezone})`}
+      />
       <DataTable
         caption="Event count by day"
         columns={[
-          { key: 'day', label: 'Day' },
+          { key: 'day', label: `Day (${timezone})`, render: (r) => (r.partial ? `${r.day} (partial)` : r.day) },
           { key: 'count', label: 'Count' },
         ]}
         rows={data.trend}
@@ -202,7 +211,7 @@ export function EventExplorerPage() {
       <DateRangeFields range={range} />
       <EventExplorerFilters {...filters} propertyOptions={propertyOptions} />
       <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
-      {data && <EventExplorerResults data={data} />}
+      {data && <EventExplorerResults data={data} timezone={timezone} />}
       {name && propertyKey && (
         <PropertyValueInspector name={name} propertyKey={propertyKey} propertyValue={propertyValue} onPickValue={(v) => filters.setPropertyValue(v === propertyValue ? '' : v)} from={from} to={to} />
       )}

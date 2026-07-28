@@ -23,6 +23,9 @@ type OverviewDaily struct {
 	IngestionAccepted            int64   `json:"ingestion_accepted"`
 	IngestionDuplicates          int64   `json:"ingestion_duplicates"`
 	IngestionRejected            int64   `json:"ingestion_rejected"`
+	// Partial marks the trailing day when it's today — still
+	// accumulating events, not a complete day.
+	Partial bool `json:"partial,omitempty"`
 }
 
 // EventKindDay is one day's product/system event split, over the full
@@ -31,6 +34,7 @@ type EventKindDay struct {
 	Day     string `json:"day"`
 	Product int64  `json:"product"`
 	System  int64  `json:"system"`
+	Partial bool   `json:"partial,omitempty"`
 }
 
 // dailyIndex is the 7 trailing calendar days ending at dayEnd (exclusive),
@@ -75,6 +79,9 @@ func queryOverviewDaily(ctx context.Context, pool *pgxpool.Pool, projectID strin
 		return nil, err
 	}
 
+	if last := &idx.days[len(idx.days)-1]; isToday(last.Day, loc) {
+		last.Partial = true
+	}
 	return idx.days, nil
 }
 
@@ -211,7 +218,8 @@ func dayEndOf(idx dailyIndex) time.Time {
 
 // queryEventsByKind returns the full [from, to) range's daily product/system
 // split for the Overview stacked chart (unlike queryOverviewDaily, this
-// follows the selected date range rather than a fixed trailing week).
+// follows the selected date range rather than a fixed trailing week). The
+// LIMIT below must match trendDayLimit — see its doc comment.
 func queryEventsByKind(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, loc *time.Location) ([]EventKindDay, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT (effective_at AT TIME ZONE $4)::date AS day,
@@ -236,6 +244,9 @@ func queryEventsByKind(ctx context.Context, pool *pgxpool.Pool, projectID string
 			return nil, err
 		}
 		result = append(result, EventKindDay{Day: day.Format("2006-01-02"), Product: product, System: system})
+	}
+	if len(result) > 0 && isToday(result[len(result)-1].Day, loc) {
+		result[len(result)-1].Partial = true
 	}
 	return result, rows.Err()
 }

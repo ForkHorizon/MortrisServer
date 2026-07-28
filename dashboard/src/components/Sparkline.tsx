@@ -9,13 +9,13 @@ export function Sparkline({ data }: { data: DayCount[] }) {
   if (data.length < 2) return <span className="hint">—</span>
 
   const max = Math.max(...data.map((d) => d.count), 1)
-  const points = data
-    .map((d, i) => {
-      const x = (i / (data.length - 1)) * WIDTH
-      const y = HEIGHT - (d.count / max) * HEIGHT
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(' ')
+  const coords = data.map((d, i) => ({
+    x: (i / (data.length - 1)) * WIDTH,
+    y: HEIGHT - (d.count / max) * HEIGHT,
+  }))
+  const points = coords.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const last = data[data.length - 1]
+  const lastPoint = coords[coords.length - 1]
 
   return (
     <svg
@@ -23,9 +23,12 @@ export function Sparkline({ data }: { data: DayCount[] }) {
       height={HEIGHT}
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       role="img"
-      aria-label={`Trend over ${data.length} days, latest ${data[data.length - 1].count}`}
+      aria-label={`Trend over ${data.length} days, latest ${last.count}${last.partial ? ' (partial day, still in progress)' : ''}`}
     >
       <polyline points={points} fill="none" stroke="#2563eb" strokeWidth={1.5} />
+      {last.partial && (
+        <circle cx={lastPoint.x} cy={lastPoint.y} r={2.5} fill="white" stroke="#2563eb" strokeWidth={1.5} />
+      )}
     </svg>
   )
 }
