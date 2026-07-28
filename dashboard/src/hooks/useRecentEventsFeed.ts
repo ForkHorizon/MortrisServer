@@ -21,6 +21,18 @@ function buildParams(currentProject: string, f: RecentEventsFilters) {
   }
 }
 
+function fetchEventsPage(
+  currentProject: string,
+  filters: RecentEventsFilters,
+  before?: { receivedAt: string; eventId: string },
+) {
+  return apiGet<RecentEventsResult>('/api/v1/analytics/events/recent', {
+    ...buildParams(currentProject, filters),
+    before_received_at: before?.receivedAt,
+    before_event_id: before?.eventId,
+  })
+}
+
 // Polls the Live Event Feed endpoint every ~5s (unless paused) and exposes
 // a "load older" page fetched via the keyset cursor returned by the API.
 // Pulled out of EventFeedPage so that component stays render-only.
@@ -29,23 +41,28 @@ export function useRecentEventsFeed(currentProject: string, filters: RecentEvent
   const [cursor, setCursor] = useState<{ receivedAt?: string; eventId?: string }>({})
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
+  const [stale, setStale] = useState(false)
   const { name, platform, appVersion, installId } = filters
 
   const refresh = useCallback(() => {
     if (!currentProject) return Promise.resolve()
-    return apiGet<RecentEventsResult>('/api/v1/analytics/events/recent', buildParams(currentProject, filters))
+    return fetchEventsPage(currentProject, filters)
       .then((res) => {
         setEvents(res.events)
         setCursor({ receivedAt: res.next_before_received_at, eventId: res.next_before_event_id })
         setError(null)
+        setStale(false)
+        setUpdatedAt(Date.now())
       })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : 'Something went wrong.'))
+      .catch((e: unknown) => {
+        // Failed poll: keep old events on screen but mark them stale.
+        setError(e instanceof ApiError ? e.message : 'Something went wrong.')
+        setStale(true)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filters destructured above so deps stay primitive
   }, [currentProject, name, platform, appVersion, installId])
 
-  // Refetch on mount/filter change; poll every ~5s unless paused. The next
-  // poll always replaces the feed with the newest page, which is the point
-  // of a live tail — "load older" below is only meaningful while paused.
   useEffect(() => {
     setLoading(true)
     refresh().finally(() => setLoading(false))
@@ -58,15 +75,11 @@ export function useRecentEventsFeed(currentProject: string, filters: RecentEvent
 
   const loadOlder = () => {
     if (!currentProject || !cursor.receivedAt || !cursor.eventId) return
-    apiGet<RecentEventsResult>('/api/v1/analytics/events/recent', {
-      ...buildParams(currentProject, filters),
-      before_received_at: cursor.receivedAt,
-      before_event_id: cursor.eventId,
-    }).then((res) => {
+    fetchEventsPage(currentProject, filters, { receivedAt: cursor.receivedAt, eventId: cursor.eventId }).then((res) => {
       setEvents((prev) => [...prev, ...res.events])
       setCursor({ receivedAt: res.next_before_received_at, eventId: res.next_before_event_id })
     })
   }
 
-  return { events, error, loading, hasMore: Boolean(cursor.receivedAt), loadOlder }
+  return { events, error, loading, updatedAt, stale, hasMore: Boolean(cursor.receivedAt), loadOlder }
 }

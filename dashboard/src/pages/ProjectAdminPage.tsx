@@ -3,19 +3,20 @@ import type { Dispatch, SetStateAction } from 'react'
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '../api/client'
 import type { ManagedProject, ProjectMember } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { Freshness } from '../components/Freshness'
 import { useApiData } from '../hooks/useApiData'
 
 type Refresh = Dispatch<SetStateAction<number>>
 
 export function ProjectAdminPage() {
   const { currentProject } = useAuth()
-  const { project, members, loading, refresh } = useProjectData(currentProject)
+  const { project, members, loading, updatedAt, stale, refresh } = useProjectData(currentProject)
   const [error, setError] = useState<string | null>(null)
   if (!currentProject) return <p>Select a project to manage it.</p>
   return (
     <section aria-labelledby="project-admin-heading">
       <h1 id="project-admin-heading">Project settings and team</h1>
-      {loading && <p role="status">Loading…</p>}
+      <Freshness loading={loading} stale={stale} updatedAt={updatedAt} />
       {project && <ProjectSettingsForm project={project} projectID={currentProject} refresh={refresh} setError={setError} />}
       <h2>Project accounts</h2>
       <ProjectMemberList members={members} projectID={currentProject} refresh={refresh} setError={setError} />
@@ -33,8 +34,8 @@ function useProjectData(currentProject: string) {
     const projectURL = `/api/v1/projects/${encodeURIComponent(currentProject)}`
     return Promise.all([apiGet<{ project: ManagedProject }>(projectURL), apiGet<{ members: ProjectMember[] }>(`${projectURL}/members`)])
   }, [currentProject, refreshKey])
-  const { data, loading } = useApiData(load)
-  return { project: data?.[0].project, members: data?.[1].members ?? [], loading, refresh: setRefreshKey }
+  const { data, loading, updatedAt, stale } = useApiData(load, `project-admin:${currentProject}`)
+  return { project: data?.[0].project, members: data?.[1].members ?? [], loading, updatedAt, stale, refresh: setRefreshKey }
 }
 
 function ProjectSettingsForm({ project, projectID, refresh, setError }: { project: ManagedProject; projectID: string; refresh: Refresh; setError: Dispatch<SetStateAction<string | null>> }) {

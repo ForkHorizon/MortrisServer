@@ -35,10 +35,7 @@ export function EventSelect({
     () => apiGet<CatalogResult>('/api/v1/analytics/catalog', { project: currentProject }),
     [currentProject],
   )
-  // ponytail: each instance fetches the catalog independently — the lazy
-  // option for a handful of dropdowns on one page. Add a shared cache if
-  // the catalog ever grows large enough for this to matter.
-  const { data } = useApiData<CatalogResult>(fetchCatalog)
+  const { data } = useApiData<CatalogResult>(fetchCatalog, `catalog:${currentProject}`)
   const listId = `${id}-options`
 
   return (

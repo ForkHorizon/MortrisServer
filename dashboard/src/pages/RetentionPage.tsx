@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { Freshness } from '../components/Freshness'
 import { DataTable } from '../components/DataTable'
 import { CohortHeatmap } from '../components/CohortHeatmap'
 
@@ -22,7 +23,10 @@ export function RetentionPage() {
     [currentProject, from, to, timezone],
   )
 
-  const { data, error, loading } = useApiData<RetentionResult>(fetchRetention)
+  const { data, error, loading, updatedAt, stale } = useApiData<RetentionResult>(
+    fetchRetention,
+    `retention:${currentProject}:${from}:${to}:${timezone}`,
+  )
 
   if (!currentProject) return <p>Select a project to view retention.</p>
 
@@ -34,8 +38,7 @@ export function RetentionPage() {
         new cohort member rather than extending an old one.
       </p>
       <DateRangeFields range={range} />
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
       {data && data.cohorts.length > 0 && <CohortHeatmap cohorts={data.cohorts} to={range.to} />}
       {data && (
         <DataTable

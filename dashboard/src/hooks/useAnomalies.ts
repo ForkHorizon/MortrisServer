@@ -11,5 +11,5 @@ export function useAnomalies(projectID: string) {
     () => apiGet<AnomaliesResult>('/api/v1/analytics/anomalies', { project: projectID }),
     [projectID],
   )
-  return useApiData<AnomaliesResult>(fetchAnomalies)
+  return useApiData<AnomaliesResult>(fetchAnomalies, `anomalies:${projectID}`)
 }

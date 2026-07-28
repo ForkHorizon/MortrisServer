@@ -2,16 +2,21 @@ import { useCallback, useMemo, useState } from 'react'
 import { apiGet } from '../api/client'
 import type { CatalogEntry, CatalogResult, EventAnomaly } from '../api/types'
 import { useAuth } from '../auth/useAuth'
-import { useApiData } from '../hooks/useApiData'
+import { combineFreshness, useApiData } from '../hooks/useApiData'
 import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
+import { Freshness } from '../components/Freshness'
 import { DataTable, type Column } from '../components/DataTable'
 import { Sparkline } from '../components/Sparkline'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { Entity } from '../components/Entity'
 
 type SortKey = 'name' | 'count'
+
+function fetchCatalogPage(project: string, params: { from: string; to: string; timezone: string }) {
+  return apiGet<CatalogResult>('/api/v1/analytics/catalog', { project, ...params })
+}
 
 function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
   return [
@@ -74,24 +79,21 @@ function SortControls({ sortKey, setSortKey }: { sortKey: SortKey; setSortKey: (
 export function CatalogPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
+  const { from, to, timezone } = range.params
   const [sortKey, setSortKey] = useState<SortKey>('count')
   const fetchCatalog = useCallback(
-    () =>
-      apiGet<CatalogResult>('/api/v1/analytics/catalog', {
-        project: currentProject,
-        from: range.params.from,
-        to: range.params.to,
-        timezone: range.params.timezone,
-      }),
-    [currentProject, range.params.from, range.params.to, range.params.timezone],
+    () => fetchCatalogPage(currentProject, { from, to, timezone }),
+    [currentProject, from, to, timezone],
   )
-
-  const { data, error, loading } = useApiData<CatalogResult>(fetchCatalog)
-  const { data: anomalies } = useAnomalies(currentProject)
+  const catalog = useApiData<CatalogResult>(fetchCatalog, `catalog:${currentProject}:${from}:${to}:${timezone}`)
+  const { data } = catalog
+  const anomalies = useAnomalies(currentProject)
   const anomaliesByName = useMemo(
-    () => new Map(anomalies?.anomalies.map((a) => [a.name, a]) ?? []),
-    [anomalies],
+    () => new Map(anomalies.data?.anomalies.map((a) => [a.name, a]) ?? []),
+    [anomalies.data],
   )
+  // Combined: this column shouldn't imply a different freshness than the volume column next to it.
+  const freshness = combineFreshness(catalog, anomalies)
   const sortedEntries = useMemo(() => {
     if (!data) return []
     const entries = [...data.entries]
@@ -107,8 +109,7 @@ export function CatalogPage() {
       <h1 id="catalog-heading">Event catalog</h1>
       <DateRangeFields range={range} />
       <SortControls sortKey={sortKey} setSortKey={setSortKey} />
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      <Freshness {...freshness} />
       {data && (
         <DataTable
           caption="Declared and auto-discovered events, with volume for the selected range"

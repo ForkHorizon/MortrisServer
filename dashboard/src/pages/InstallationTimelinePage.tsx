@@ -6,6 +6,7 @@ import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
+import { Freshness } from '../components/Freshness'
 
 type SessionEvent = TimelineEvent & { deltaMs: number }
 
@@ -114,7 +115,10 @@ export function InstallationTimelinePage() {
     [currentProject, installId],
   )
 
-  const { data, error, loading } = useApiData<TimelineResult | null>(fetchTimeline)
+  const { data, error, loading, updatedAt, stale } = useApiData<TimelineResult | null>(
+    fetchTimeline,
+    `installation:${currentProject}:${installId}`,
+  )
 
   if (!currentProject) return <p>Select a project to look up an installation.</p>
 
@@ -124,8 +128,7 @@ export function InstallationTimelinePage() {
       <p>Admin-only: full product and system event history for one anonymous installation ID.</p>
       <LookupForm inputId={inputId} setInputId={setInputId} onSubmit={() => setInstallId(inputId.trim())} />
 
-      {loading && <p role="status">Loading…</p>}
-      {error && <p role="alert">{error}</p>}
+      {installId && <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />}
       {data && <InstallationDetail data={data} />}
     </section>
   )
