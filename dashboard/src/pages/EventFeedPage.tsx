@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { RecentEvent } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useRecentEventsFeed } from '../hooks/useRecentEventsFeed'
+import { useURLParams } from '../hooks/useURLParams'
 import { EventSelect } from '../components/EventSelect'
 import { DataTable, type Column } from '../components/DataTable'
 
@@ -73,10 +74,15 @@ function FeedFilters({
 
 export function EventFeedPage() {
   const { currentProject } = useAuth()
-  const [name, setName] = useState('')
-  const [platform, setPlatform] = useState('')
-  const [appVersion, setAppVersion] = useState('')
-  const [installId, setInstallId] = useState('')
+  const { get, set } = useURLParams()
+  const name = get('name')
+  const platform = get('platform')
+  const appVersion = get('app_version')
+  const installId = get('install_id')
+  const setName = (v: string) => set('name', v)
+  const setPlatform = (v: string) => set('platform', v)
+  const setAppVersion = (v: string) => set('app_version', v)
+  const setInstallId = (v: string) => set('install_id', v)
   const [paused, setPaused] = useState(false)
   const { events, error, loading, hasMore, loadOlder } = useRecentEventsFeed(
     currentProject,
