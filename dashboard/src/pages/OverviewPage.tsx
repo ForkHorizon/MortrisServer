@@ -10,6 +10,7 @@ import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { DigestPanel } from '../components/DigestPanel'
+import { Entity } from '../components/Entity'
 
 function dailyTrend(daily: OverviewDaily[], key: keyof OverviewDaily) {
   return daily.map((d) => ({ day: d.day, count: Number(d[key]) }))
@@ -71,7 +72,7 @@ function AnomaliesBanner({ anomalies }: { anomalies: EventAnomaly[] }) {
       <ul>
         {anomalies.map((a) => (
           <li key={a.name}>
-            <strong>{a.name}</strong> <AnomalyBadge anomaly={a} />
+            <Entity type="event" value={a.name} /> <AnomalyBadge anomaly={a} />
           </li>
         ))}
       </ul>
