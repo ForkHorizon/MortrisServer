@@ -54,7 +54,8 @@ GRANT USAGE ON SCHEMA public TO analytics_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     projects, installations, events, event_catalog, client_policy_rules,
     maintenance_runs, daily_registration_counters, ingestion_stats,
-    admin_users, admin_user_projects, admin_sessions, admin_audit_log
+    admin_users, admin_user_projects, admin_sessions, admin_audit_log,
+    event_rejection_stats, event_property_drift
     TO analytics_writer;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO analytics_writer;
 
@@ -66,7 +67,7 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO analytics_writer;
 GRANT USAGE ON SCHEMA public TO analytics_reader;
 GRANT SELECT ON
     projects, installations, events, event_catalog, client_policy_rules,
-    maintenance_runs, ingestion_stats
+    maintenance_runs, ingestion_stats, event_rejection_stats, event_property_drift
     TO analytics_reader;
 ALTER ROLE analytics_reader SET statement_timeout = '5s';
 
