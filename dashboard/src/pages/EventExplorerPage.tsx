@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
 import type { CatalogResult, EventExplorerResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
+import { useURLParams } from '../hooks/useURLParams'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
 import { StatGrid, StatTile } from '../components/StatTile'
@@ -16,30 +16,10 @@ import { DataTable } from '../components/DataTable'
 type PropertyValueCount = { value: string; count: number }
 type PropertyValuesResult = { values: PropertyValueCount[] }
 
-// Filter state lives in the URL (plan 2c: saved views) — a filtered
-// Event Explorer view, including a property drill-down, is shareable
-// and bookmarkable with no server-side "saved reports" table.
+// A filtered Event Explorer view, including a property drill-down, is
+// shareable and bookmarkable with no server-side "saved reports" table.
 function useEventExplorerFilters() {
-  const [searchParams, setSearchParams] = useSearchParams()
-
-  const get = (key: string) => searchParams.get(key) ?? ''
-  // Takes a patch of several keys at once — setSearchParams isn't a
-  // React state setter, so calling it more than once per handler (e.g.
-  // changing name while clearing property_key/property_value) has each
-  // call read the same stale snapshot and the earlier calls get lost.
-  const setMany = (patch: Record<string, string>) =>
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        for (const [key, value] of Object.entries(patch)) {
-          if (value) next.set(key, value)
-          else next.delete(key)
-        }
-        return next
-      },
-      { replace: true },
-    )
-  const set = (key: string, value: string) => setMany({ [key]: value })
+  const { get, set, setMany } = useURLParams()
 
   return {
     name: get('name'),
