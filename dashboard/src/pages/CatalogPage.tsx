@@ -14,6 +14,10 @@ import { Entity } from '../components/Entity'
 
 type SortKey = 'name' | 'count'
 
+function fetchCatalogPage(project: string, params: { from: string; to: string; timezone: string }) {
+  return apiGet<CatalogResult>('/api/v1/analytics/catalog', { project, ...params })
+}
+
 function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
   return [
   { key: 'name', label: 'Name', render: (r) => <Entity type="event" value={r.name} /> },
@@ -75,30 +79,20 @@ function SortControls({ sortKey, setSortKey }: { sortKey: SortKey; setSortKey: (
 export function CatalogPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
+  const { from, to, timezone } = range.params
   const [sortKey, setSortKey] = useState<SortKey>('count')
   const fetchCatalog = useCallback(
-    () =>
-      apiGet<CatalogResult>('/api/v1/analytics/catalog', {
-        project: currentProject,
-        from: range.params.from,
-        to: range.params.to,
-        timezone: range.params.timezone,
-      }),
-    [currentProject, range.params.from, range.params.to, range.params.timezone],
+    () => fetchCatalogPage(currentProject, { from, to, timezone }),
+    [currentProject, from, to, timezone],
   )
-
-  const catalog = useApiData<CatalogResult>(
-    fetchCatalog,
-    `catalog:${currentProject}:${range.params.from}:${range.params.to}:${range.params.timezone}`,
-  )
+  const catalog = useApiData<CatalogResult>(fetchCatalog, `catalog:${currentProject}:${from}:${to}:${timezone}`)
   const { data } = catalog
   const anomalies = useAnomalies(currentProject)
   const anomaliesByName = useMemo(
     () => new Map(anomalies.data?.anomalies.map((a) => [a.name, a]) ?? []),
     [anomalies.data],
   )
-  // Combined so the "today vs typical" column never implies a different
-  // freshness than the volume column sitting right next to it.
+  // Combined: this column shouldn't imply a different freshness than the volume column next to it.
   const freshness = combineFreshness(catalog, anomalies)
   const sortedEntries = useMemo(() => {
     if (!data) return []
