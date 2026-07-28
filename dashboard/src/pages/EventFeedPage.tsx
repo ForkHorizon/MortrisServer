@@ -1,23 +1,19 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { RecentEvent } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useRecentEventsFeed } from '../hooks/useRecentEventsFeed'
 import { useURLParams } from '../hooks/useURLParams'
 import { EventSelect } from '../components/EventSelect'
 import { DataTable, type Column } from '../components/DataTable'
+import { Entity } from '../components/Entity'
 
 const feedColumns: Column<RecentEvent>[] = [
   { key: 'received_at', label: 'Received', render: (r) => new Date(r.received_at).toLocaleString() },
-  { key: 'name', label: 'Event' },
+  { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
-  {
-    key: 'install_id',
-    label: 'Install',
-    render: (r) => <Link to={`/installations?id=${encodeURIComponent(r.install_id)}`}>{r.install_id}</Link>,
-  },
-  { key: 'platform', label: 'Platform' },
-  { key: 'app_version', label: 'Version' },
+  { key: 'install_id', label: 'Install', render: (r) => <Entity type="install" value={r.install_id} /> },
+  { key: 'platform', label: 'Platform', render: (r) => <Entity type="platform" value={r.platform} /> },
+  { key: 'app_version', label: 'Version', render: (r) => <Entity type="app_version" value={r.app_version} /> },
   {
     key: 'properties',
     label: 'Properties',

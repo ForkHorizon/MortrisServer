@@ -9,12 +9,13 @@ import { DateRangeFields } from '../components/DateRangeFields'
 import { DataTable, type Column } from '../components/DataTable'
 import { Sparkline } from '../components/Sparkline'
 import { AnomalyBadge } from '../components/AnomalyBadge'
+import { Entity } from '../components/Entity'
 
 type SortKey = 'name' | 'count'
 
 function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
   return [
-  { key: 'name', label: 'Name' },
+  { key: 'name', label: 'Name', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'kind', label: 'Kind' },
   { key: 'known', label: 'Status', render: (r) => (r.known ? 'Declared' : 'Auto-discovered (undeclared)') },
   { key: 'event_count', label: 'Events (range)' },

@@ -138,6 +138,25 @@ nav[aria-label='Dashboard sections'] a.active {
   white-space: nowrap;
 }
 
+.entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.entity-copy {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--text-muted, inherit);
+}
+.entity-copy:hover {
+  color: var(--accent);
+}
+
 .anomalies-banner {
   border-left: 3px solid var(--danger);
   background: var(--bg-alt);

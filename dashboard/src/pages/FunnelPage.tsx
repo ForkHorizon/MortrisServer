@@ -8,12 +8,13 @@ import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
 import { DataTable, type Column } from '../components/DataTable'
 import { TrendChart } from '../components/TrendChart'
+import { Entity } from '../components/Entity'
 
 const MIN_STEPS = 2
 const MAX_STEPS = 5
 
 const funnelColumns: Column<FunnelStep>[] = [
-  { key: 'name', label: 'Step' },
+  { key: 'name', label: 'Step', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'count', label: 'Installations reached' },
   {
     key: 'conversion_from_first',

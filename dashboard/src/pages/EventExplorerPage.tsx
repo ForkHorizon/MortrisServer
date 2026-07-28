@@ -10,6 +10,7 @@ import { EventSelect } from '../components/EventSelect'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { DataTable } from '../components/DataTable'
+import { CopyButton } from '../components/Entity'
 
 // Only used by the Property Value Inspector below — kept local instead
 // of growing the shared api/types.ts for a single consumer.
@@ -97,10 +98,13 @@ function PropertyValueTable({ values, propertyValue, onPickValue }: { values: Pr
           key: 'value',
           label: 'Value',
           render: (r) => (
-            <button type="button" aria-pressed={r.value === propertyValue} onClick={() => onPickValue(r.value)}>
-              {r.value}
-              {r.value === propertyValue ? ' (filtering)' : ''}
-            </button>
+            <span className="entity">
+              <button type="button" aria-pressed={r.value === propertyValue} onClick={() => onPickValue(r.value)}>
+                {r.value}
+                {r.value === propertyValue ? ' (filtering)' : ''}
+              </button>
+              <CopyButton value={r.value} />
+            </span>
           ),
         },
         { key: 'count', label: 'Count' },

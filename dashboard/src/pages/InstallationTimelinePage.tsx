@@ -5,6 +5,7 @@ import type { TimelineEvent, TimelineResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApiData } from '../hooks/useApiData'
 import { DataTable, type Column } from '../components/DataTable'
+import { Entity } from '../components/Entity'
 
 type SessionEvent = TimelineEvent & { deltaMs: number }
 
@@ -34,7 +35,7 @@ function groupBySession(events: TimelineEvent[]): Array<{ sessionId: string; eve
 const sessionColumns: Column<SessionEvent>[] = [
   { key: 'effective_at', label: 'When', render: (r) => new Date(r.effective_at).toLocaleString() },
   { key: 'delta', label: '+elapsed', render: (r) => `+${r.deltaMs}ms` },
-  { key: 'name', label: 'Event' },
+  { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
   { key: 'time_quality', label: 'Clock quality' },
   { key: 'properties', label: 'Properties', render: (r) => JSON.stringify(r.properties) },
@@ -66,8 +67,8 @@ function SessionSection({ sessionId, events }: { sessionId: string; events: Sess
   return (
     <details open>
       <summary>
-        Session {sessionId} — {events.length} event{events.length === 1 ? '' : 's'}, spanning{' '}
-        {events[events.length - 1].session_elapsed_ms}ms
+        Session <Entity type="session" value={sessionId} /> — {events.length} event{events.length === 1 ? '' : 's'},
+        spanning {events[events.length - 1].session_elapsed_ms}ms
       </summary>
       <DataTable
         caption={`Events for session ${sessionId}`}
