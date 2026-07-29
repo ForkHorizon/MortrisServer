@@ -12,6 +12,15 @@ import { useDateRange } from '../hooks/useDateRange'
 const duration = (ms: number) => `${Math.round(ms / 1000)}s`
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`
 
+function summaryVerdict(data: GameplayDiagnostics): string {
+  const { attempts, falls } = data.summary
+  const completed = data.summary.by_outcome?.find((o) => o.outcome === 'completed')?.attempts ?? 0
+  if (attempts === 0) return 'No attempts in this range.'
+  const completionRate = Math.round((completed / attempts) * 100)
+  const fallsPerAttempt = (falls / attempts).toFixed(1)
+  return `${completionRate}% of attempts completed (${completed} of ${attempts}), averaging ${fallsPerAttempt} falls per attempt.`
+}
+
 export function GameplayDiagnosticsPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
@@ -26,6 +35,7 @@ export function GameplayDiagnosticsPage() {
     <DateRangeFields range={range} />
     <Freshness loading={diagnostics.loading} error={diagnostics.error} stale={diagnostics.stale} updatedAt={diagnostics.updatedAt} />
     {diagnostics.data && <>
+      <p className="verdict">{summaryVerdict(diagnostics.data)}</p>
       <StatGrid>
         <StatTile label="Attempts" value={diagnostics.data.summary.attempts} />
         <StatTile label="Falls" value={diagnostics.data.summary.falls} />
@@ -35,27 +45,45 @@ export function GameplayDiagnosticsPage() {
         <StatTile label="Hints" value={diagnostics.data.summary.hints} />
       </StatGrid>
       <p>Active and wall time above cover completed and given-up attempts only — see the breakdown below for attempts still in progress or lost.</p>
-      <DataTable caption="Attempts by outcome" rows={diagnostics.data.summary.by_outcome ?? []} getRowKey={(r) => r.outcome} columns={[
-        { key: 'outcome', label: 'Outcome' }, { key: 'attempts', label: 'Attempts' },
-        { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
-        { key: 'wall_elapsed_ms', label: 'Wall', render: (r) => duration(r.wall_elapsed_ms) },
-        { key: 'pause_count', label: 'Breaks' },
-      ]} />
-      <DataTable caption="City, house, and wave outcomes" rows={diagnostics.data.scopes} getRowKey={(r) => `${r.city_id}-${r.house_id}-${r.wave_index}`} columns={[
-        { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' }, { key: 'attempts', label: 'Attempts' },
-        { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' }, { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
-      ]} />
-      <DataTable caption="Target and detail friction" rows={diagnostics.data.friction} getRowKey={(r) => `${r.block_id}-${r.target_id}`} columns={[
-        { key: 'block_id', label: 'Detail' }, { key: 'target_id', label: 'Target' }, { key: 'attempts', label: 'Attempts' }, { key: 'placements', label: 'Placed' }, { key: 'falls', label: 'Falls' },
-        { key: 'fall_rate', label: 'Fall rate', render: (r) => percent(r.fall_rate) }, { key: 'first_attempt_failure_rate', label: 'First fail', render: (r) => percent(r.first_attempt_failure_rate) },
-      ]} />
-      <DataTable caption="Daily outcomes (selected IANA timezone)" rows={diagnostics.data.daily} getRowKey={(r) => `${r.day}-${r.city_id}-${r.house_id}-${r.wave_index}-${r.content_revision}-${r.build_number}`} columns={[
-        { key: 'day', label: 'Day' }, { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' },
-        { key: 'build_number', label: 'Build' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' },
-      ]} />
+      <details>
+        <summary>Attempts by outcome</summary>
+        <DataTable caption="Attempts by outcome" rows={diagnostics.data.summary.by_outcome ?? []} getRowKey={(r) => r.outcome} columns={[
+          { key: 'outcome', label: 'Outcome' }, { key: 'attempts', label: 'Attempts' },
+          { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
+          { key: 'wall_elapsed_ms', label: 'Wall', render: (r) => duration(r.wall_elapsed_ms) },
+          { key: 'pause_count', label: 'Breaks' },
+        ]} />
+      </details>
+      <details>
+        <summary>City, house, and wave outcomes</summary>
+        <DataTable caption="City, house, and wave outcomes" rows={diagnostics.data.scopes} getRowKey={(r) => `${r.city_id}-${r.house_id}-${r.wave_index}`} columns={[
+          { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' }, { key: 'attempts', label: 'Attempts' },
+          { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' }, { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
+        ]} />
+      </details>
+      <details>
+        <summary>Target and detail friction</summary>
+        <DataTable caption="Target and detail friction" rows={diagnostics.data.friction} getRowKey={(r) => `${r.block_id}-${r.target_id}`} columns={[
+          { key: 'block_id', label: 'Detail' }, { key: 'target_id', label: 'Target' }, { key: 'attempts', label: 'Attempts' }, { key: 'placements', label: 'Placed' }, { key: 'falls', label: 'Falls' },
+          { key: 'fall_rate', label: 'Fall rate', render: (r) => percent(r.fall_rate) }, { key: 'first_attempt_failure_rate', label: 'First fail', render: (r) => percent(r.first_attempt_failure_rate) },
+        ]} />
+      </details>
+      <details>
+        <summary>Daily outcomes</summary>
+        <DataTable caption="Daily outcomes (selected IANA timezone)" rows={diagnostics.data.daily} getRowKey={(r) => `${r.day}-${r.city_id}-${r.house_id}-${r.wave_index}-${r.content_revision}-${r.build_number}`} columns={[
+          { key: 'day', label: 'Day' }, { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' },
+          { key: 'build_number', label: 'Build' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' },
+        ]} />
+      </details>
     </>}
-    <PlayersSection project={currentProject} from={from} to={to} />
-    <AttemptSection project={currentProject} />
+    <details>
+      <summary>Anonymous players and devices</summary>
+      <PlayersSection project={currentProject} from={from} to={to} />
+    </details>
+    <details>
+      <summary>Attempt timeline and gravity reconstruction</summary>
+      <AttemptSection project={currentProject} />
+    </details>
   </section>
 }
 
@@ -65,7 +93,6 @@ function AttemptSection({ project }: { project: string }) {
   const fetchAttempt = useCallback(() => selectedAttempt ? apiGet<GameplayAttempt>(`/api/v1/analytics/gameplay/attempts/${encodeURIComponent(selectedAttempt)}`, { project }) : Promise.resolve(null), [project, selectedAttempt])
   const timeline = useApiData<GameplayAttempt | null>(fetchAttempt, `gameplay-attempt:${project}:${selectedAttempt}`)
   return <>
-    <h2>Attempt timeline and gravity reconstruction</h2>
     <div className="field"><label htmlFor="attempt-id">Attempt ID</label><input id="attempt-id" value={attemptID} onChange={(e) => setAttemptID(e.target.value)} /><button type="button" onClick={() => setSelectedAttempt(attemptID)}>Load attempt</button></div>
     {selectedAttempt && <Freshness loading={timeline.loading} error={timeline.error} stale={timeline.stale} updatedAt={timeline.updatedAt} loadingLabel="Loading attempt…" />}
     {timeline.data && <DataTable caption={`Attempt ${timeline.data.attempt_id}`} rows={timeline.data.events} getRowKey={(r) => r.event_id} columns={[
@@ -83,7 +110,6 @@ function PlayersSection({ project, from, to }: { project: string; from: string; 
   const fetchTimeline = useCallback(() => selectedPlayer ? apiGet<TimelineResult>(`/api/v1/analytics/installations/${encodeURIComponent(selectedPlayer)}`, { project }) : Promise.resolve(null), [project, selectedPlayer])
   const timeline = useApiData<TimelineResult | null>(fetchTimeline, `installation:${project}:${selectedPlayer}`)
   return <>
-    <h2>Anonymous players and devices</h2>
     <p>The player ID is the SDK installation ID, not a game account or person. Select it to inspect every raw event for that device.</p>
     <Freshness loading={players.loading} error={players.error} stale={players.stale} updatedAt={players.updatedAt} loadingLabel="Loading players…" />
     {players.data && <DataTable caption="Anonymous player devices" rows={players.data.players} getRowKey={(r) => r.install_id} columns={[

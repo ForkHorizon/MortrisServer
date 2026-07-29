@@ -19,47 +19,48 @@ function fetchCatalogPage(project: string, params: { from: string; to: string; t
   return apiGet<CatalogResult>('/api/v1/analytics/catalog', { project, ...params })
 }
 
+function CatalogDetail({ entry }: { entry: CatalogEntry }) {
+  return (
+    <details>
+      <summary>Details</summary>
+      <dl className="catalog-detail">
+        <dt>Kind</dt>
+        <dd>{entry.kind}</dd>
+        <dt>Description</dt>
+        <dd>{entry.description || '—'}</dd>
+        <dt>Owner</dt>
+        <dd>{entry.owner || '—'}</dd>
+        <dt>Properties</dt>
+        <dd>{entry.properties.length ? entry.properties.map((p) => p.name).join(', ') : '—'}</dd>
+        <dt>Schema drift</dt>
+        <dd>{entry.drift && entry.drift.length > 0 ? entry.drift.map((d) => `${d.property_key} (${d.count})`).join(', ') : '—'}</dd>
+        <dt>Rejected</dt>
+        <dd>{entry.rejected_count > 0 ? `${entry.rejected_count} (${entry.rejection_rate.toFixed(1)}%)` : '—'}</dd>
+      </dl>
+    </details>
+  )
+}
+
 function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
   return [
-  { key: 'name', label: 'Name', render: (r) => <Entity type="event" value={r.name} /> },
-  { key: 'kind', label: 'Kind' },
-  { key: 'known', label: 'Status', render: (r) => (r.known ? 'Declared' : 'Auto-discovered (undeclared)') },
-  { key: 'event_count', label: 'Events (range)' },
-  { key: 'percent_of_total', label: '% of total', render: (r) => `${r.percent_of_total.toFixed(1)}%` },
-  { key: 'sparkline', label: 'Trend', render: (r) => <Sparkline data={r.sparkline} /> },
-  {
-    key: 'anomaly',
-    label: 'Today vs typical',
-    render: (r) => {
-      const a = anomaliesByName.get(r.name)
-      return a ? <AnomalyBadge anomaly={a} /> : '—'
+    { key: 'name', label: 'Name', render: (r) => <Entity type="event" value={r.name} /> },
+    { key: 'known', label: 'Status', render: (r) => (r.known ? 'Declared' : 'Auto-discovered (undeclared)') },
+    { key: 'event_count', label: 'Volume (range)', render: (r) => `${r.event_count} (${r.percent_of_total.toFixed(1)}%)` },
+    { key: 'sparkline', label: 'Trend', render: (r) => <Sparkline data={r.sparkline} /> },
+    {
+      key: 'anomaly',
+      label: 'Today vs typical',
+      render: (r) => {
+        const a = anomaliesByName.get(r.name)
+        return a ? <AnomalyBadge anomaly={a} /> : '—'
+      },
     },
-  },
-  {
-    key: 'rejection_rate',
-    label: 'Rejected',
-    render: (r) => (r.rejected_count > 0 ? `${r.rejected_count} (${r.rejection_rate.toFixed(1)}%)` : '—'),
-  },
-  {
-    key: 'drift',
-    label: 'Schema drift',
-    render: (r) =>
-      r.drift && r.drift.length > 0
-        ? r.drift.map((d) => `${d.property_key} (${d.count})`).join(', ')
-        : '—',
-  },
-  { key: 'description', label: 'Description', render: (r) => r.description || '—' },
-  { key: 'owner', label: 'Owner', render: (r) => r.owner || '—' },
-  {
-    key: 'properties',
-    label: 'Properties',
-    render: (r) => (r.properties.length ? r.properties.map((p) => p.name).join(', ') : '—'),
-  },
-  {
-    key: 'last_seen_at',
-    label: 'Last seen (browser time)',
-    render: (r) => (r.last_seen_at ? new Date(r.last_seen_at).toLocaleString() : '—'),
-  },
+    {
+      key: 'last_seen_at',
+      label: 'Last seen (browser time)',
+      render: (r) => (r.last_seen_at ? new Date(r.last_seen_at).toLocaleString() : '—'),
+    },
+    { key: 'details', label: 'Details', render: (r) => <CatalogDetail entry={r} /> },
   ]
 }
 
