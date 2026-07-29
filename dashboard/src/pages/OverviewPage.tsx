@@ -7,7 +7,7 @@ import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
-import { StatGrid, StatTile, computeDelta } from '../components/StatTile'
+import { StatGrid, StatTile, computeDelta, type Delta } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { DigestPanel } from '../components/DigestPanel'
@@ -25,8 +25,9 @@ function previousPeriodParams(from: string, to: string) {
   return { from: new Date(new Date(from).getTime() - durationMs).toISOString(), to: from }
 }
 
-function OverviewStats({ data, previous }: { data: Overview; previous: Overview | null }) {
-  const delta = (key: keyof Overview) => (previous ? computeDelta(Number(data[key]), Number(previous[key])) : null)
+type DeltaLookup = (key: keyof Overview) => Delta | null
+
+function ProductStats({ data, delta }: { data: Overview; delta: DeltaLookup }) {
   return (
     <>
       <h2>Product</h2>
@@ -69,6 +70,13 @@ function OverviewStats({ data, previous }: { data: Overview; previous: Overview 
           delta={delta('avg_observed_session_duration_ms')}
         />
       </StatGrid>
+    </>
+  )
+}
+
+function PipelineHealthStats({ data, delta }: { data: Overview; delta: DeltaLookup }) {
+  return (
+    <>
       <h2>Pipeline health</h2>
       <StatGrid>
         <StatTile
@@ -90,6 +98,16 @@ function OverviewStats({ data, previous }: { data: Overview; previous: Overview 
           delta={delta('ingestion_rejected')}
         />
       </StatGrid>
+    </>
+  )
+}
+
+function OverviewStats({ data, previous }: { data: Overview; previous: Overview | null }) {
+  const delta: DeltaLookup = (key) => (previous ? computeDelta(Number(data[key]), Number(previous[key])) : null)
+  return (
+    <>
+      <ProductStats data={data} delta={delta} />
+      <PipelineHealthStats data={data} delta={delta} />
     </>
   )
 }

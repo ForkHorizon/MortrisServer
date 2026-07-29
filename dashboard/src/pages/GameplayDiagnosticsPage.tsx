@@ -21,6 +21,56 @@ function summaryVerdict(data: GameplayDiagnostics): string {
   return `${completionRate}% of attempts completed (${completed} of ${attempts}), averaging ${fallsPerAttempt} falls per attempt.`
 }
 
+function GameplaySummarySection({ data }: { data: GameplayDiagnostics }) {
+  return <>
+    <p className="verdict">{summaryVerdict(data)}</p>
+    <StatGrid>
+      <StatTile label="Attempts" value={data.summary.attempts} />
+      <StatTile label="Falls" value={data.summary.falls} />
+      <StatTile label="Active time" value={duration(data.summary.active_elapsed_ms)} />
+      <StatTile label="Wall time" value={duration(data.summary.wall_elapsed_ms)} />
+      <StatTile label="Breaks" value={data.summary.pause_count} />
+      <StatTile label="Hints" value={data.summary.hints} />
+    </StatGrid>
+    <p>Active and wall time above cover completed and given-up attempts only — see the breakdown below for attempts still in progress or lost.</p>
+  </>
+}
+
+function GameplayTables({ data }: { data: GameplayDiagnostics }) {
+  return <>
+    <details>
+      <summary>Attempts by outcome</summary>
+      <DataTable caption="Attempts by outcome" rows={data.summary.by_outcome ?? []} getRowKey={(r) => r.outcome} columns={[
+        { key: 'outcome', label: 'Outcome' }, { key: 'attempts', label: 'Attempts' },
+        { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
+        { key: 'wall_elapsed_ms', label: 'Wall', render: (r) => duration(r.wall_elapsed_ms) },
+        { key: 'pause_count', label: 'Breaks' },
+      ]} />
+    </details>
+    <details>
+      <summary>City, house, and wave outcomes</summary>
+      <DataTable caption="City, house, and wave outcomes" rows={data.scopes} getRowKey={(r) => `${r.city_id}-${r.house_id}-${r.wave_index}`} columns={[
+        { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' }, { key: 'attempts', label: 'Attempts' },
+        { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' }, { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
+      ]} />
+    </details>
+    <details>
+      <summary>Target and detail friction</summary>
+      <DataTable caption="Target and detail friction" rows={data.friction} getRowKey={(r) => `${r.block_id}-${r.target_id}`} columns={[
+        { key: 'block_id', label: 'Detail' }, { key: 'target_id', label: 'Target' }, { key: 'attempts', label: 'Attempts' }, { key: 'placements', label: 'Placed' }, { key: 'falls', label: 'Falls' },
+        { key: 'fall_rate', label: 'Fall rate', render: (r) => percent(r.fall_rate) }, { key: 'first_attempt_failure_rate', label: 'First fail', render: (r) => percent(r.first_attempt_failure_rate) },
+      ]} />
+    </details>
+    <details>
+      <summary>Daily outcomes</summary>
+      <DataTable caption="Daily outcomes (selected IANA timezone)" rows={data.daily} getRowKey={(r) => `${r.day}-${r.city_id}-${r.house_id}-${r.wave_index}-${r.content_revision}-${r.build_number}`} columns={[
+        { key: 'day', label: 'Day' }, { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' },
+        { key: 'build_number', label: 'Build' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' },
+      ]} />
+    </details>
+  </>
+}
+
 export function GameplayDiagnosticsPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
@@ -35,46 +85,8 @@ export function GameplayDiagnosticsPage() {
     <DateRangeFields range={range} />
     <Freshness loading={diagnostics.loading} error={diagnostics.error} stale={diagnostics.stale} updatedAt={diagnostics.updatedAt} />
     {diagnostics.data && <>
-      <p className="verdict">{summaryVerdict(diagnostics.data)}</p>
-      <StatGrid>
-        <StatTile label="Attempts" value={diagnostics.data.summary.attempts} />
-        <StatTile label="Falls" value={diagnostics.data.summary.falls} />
-        <StatTile label="Active time" value={duration(diagnostics.data.summary.active_elapsed_ms)} />
-        <StatTile label="Wall time" value={duration(diagnostics.data.summary.wall_elapsed_ms)} />
-        <StatTile label="Breaks" value={diagnostics.data.summary.pause_count} />
-        <StatTile label="Hints" value={diagnostics.data.summary.hints} />
-      </StatGrid>
-      <p>Active and wall time above cover completed and given-up attempts only — see the breakdown below for attempts still in progress or lost.</p>
-      <details>
-        <summary>Attempts by outcome</summary>
-        <DataTable caption="Attempts by outcome" rows={diagnostics.data.summary.by_outcome ?? []} getRowKey={(r) => r.outcome} columns={[
-          { key: 'outcome', label: 'Outcome' }, { key: 'attempts', label: 'Attempts' },
-          { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
-          { key: 'wall_elapsed_ms', label: 'Wall', render: (r) => duration(r.wall_elapsed_ms) },
-          { key: 'pause_count', label: 'Breaks' },
-        ]} />
-      </details>
-      <details>
-        <summary>City, house, and wave outcomes</summary>
-        <DataTable caption="City, house, and wave outcomes" rows={diagnostics.data.scopes} getRowKey={(r) => `${r.city_id}-${r.house_id}-${r.wave_index}`} columns={[
-          { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' }, { key: 'attempts', label: 'Attempts' },
-          { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' }, { key: 'active_elapsed_ms', label: 'Active', render: (r) => duration(r.active_elapsed_ms) },
-        ]} />
-      </details>
-      <details>
-        <summary>Target and detail friction</summary>
-        <DataTable caption="Target and detail friction" rows={diagnostics.data.friction} getRowKey={(r) => `${r.block_id}-${r.target_id}`} columns={[
-          { key: 'block_id', label: 'Detail' }, { key: 'target_id', label: 'Target' }, { key: 'attempts', label: 'Attempts' }, { key: 'placements', label: 'Placed' }, { key: 'falls', label: 'Falls' },
-          { key: 'fall_rate', label: 'Fall rate', render: (r) => percent(r.fall_rate) }, { key: 'first_attempt_failure_rate', label: 'First fail', render: (r) => percent(r.first_attempt_failure_rate) },
-        ]} />
-      </details>
-      <details>
-        <summary>Daily outcomes</summary>
-        <DataTable caption="Daily outcomes (selected IANA timezone)" rows={diagnostics.data.daily} getRowKey={(r) => `${r.day}-${r.city_id}-${r.house_id}-${r.wave_index}-${r.content_revision}-${r.build_number}`} columns={[
-          { key: 'day', label: 'Day' }, { key: 'city_id', label: 'City' }, { key: 'house_id', label: 'House' }, { key: 'wave_index', label: 'Wave' },
-          { key: 'build_number', label: 'Build' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' }, { key: 'hints', label: 'Hints' },
-        ]} />
-      </details>
+      <GameplaySummarySection data={diagnostics.data} />
+      <GameplayTables data={diagnostics.data} />
     </>}
     <details>
       <summary>Anonymous players and devices</summary>
