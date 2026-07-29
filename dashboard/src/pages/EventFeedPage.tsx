@@ -9,7 +9,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
 
 const feedColumns: Column<RecentEvent>[] = [
-  { key: 'received_at', label: 'Received', render: (r) => new Date(r.received_at).toLocaleString() },
+  { key: 'received_at', label: 'Received (server clock, browser time)', render: (r) => new Date(r.received_at).toLocaleString() },
   { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
   { key: 'install_id', label: 'Install', render: (r) => <Entity type="install" value={r.install_id} /> },
@@ -92,7 +92,7 @@ export function EventFeedPage() {
   return (
     <section aria-labelledby="feed-heading">
       <h1 id="feed-heading">Live event feed</h1>
-      <p>Newest events first, refreshing every ~5 seconds.</p>
+      <p>Newest events first, refreshing every ~5 seconds. Shows one page at a time — use "Load older" for earlier events.</p>
       <FeedFilters
         name={name}
         setName={setName}

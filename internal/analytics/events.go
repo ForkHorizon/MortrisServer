@@ -94,12 +94,26 @@ func validateCatalogProperty(ctx context.Context, pool *pgxpool.Pool, projectID,
 type DayCount struct {
 	Day   string `json:"day"`
 	Count int64  `json:"count"`
+	// Partial marks a day bucket that's today (in the requested
+	// timezone) and so is still accumulating events, not a complete day.
+	Partial bool `json:"partial,omitempty"`
 }
+
+// trendDayLimit caps every day-bucketed trend/sparkline query — with the
+// 90-day max window (maxWindow) it's a safety valve, not a real boundary,
+// but Truncated still flags it the same way as every other capped query.
+const trendDayLimit = 92
 
 type EventExplorerResult struct {
 	TotalEvents         int64      `json:"total_events"`
 	ActiveInstallations int64      `json:"active_installations"`
 	Trend               []DayCount `json:"trend"`
+	// Truncated is true if the trend hit trendDayLimit and may be missing days.
+	Truncated bool `json:"truncated"`
+	// UntrustedPct is the share of matching events with time_quality =
+	// 'untrusted' over [from, to) — so a trend blip isn't mistaken for
+	// real signal when it's actually bad client clocks.
+	UntrustedPct float64 `json:"untrusted_pct"`
 }
 
 // GetEventExplorer implements the Event Explorer screen (section 10.2
@@ -120,7 +134,17 @@ func GetEventExplorer(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	if err != nil {
 		return nil, err
 	}
+	result.Truncated = len(trend) >= trendDayLimit
+	if len(trend) > 0 && isToday(trend[len(trend)-1].Day, loc) {
+		trend[len(trend)-1].Partial = true
+	}
 	result.Trend = trend
+
+	untrustedPct, err := queryUntrustedPct(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	result.UntrustedPct = untrustedPct
 
 	return &result, nil
 }
@@ -157,6 +181,7 @@ func queryEventExplorerTrend(ctx context.Context, pool *pgxpool.Pool, projectID 
 		ORDER BY day
 		LIMIT 92
 	`, projectID, from, to, f.Name, f.AppVersion, f.BuildNumber, f.Platform, f.PropertyKey, f.PropertyValue, loc.String())
+	// The LIMIT above must match trendDayLimit — see its doc comment.
 	if err != nil {
 		return nil, err
 	}

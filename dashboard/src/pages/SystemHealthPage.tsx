@@ -45,7 +45,7 @@ function MaintenanceTable({ data }: { data: SystemHealth }) {
         caption="Most recent maintenance run per kind"
         columns={[
           { key: 'kind', label: 'Kind' },
-          { key: 'started_at', label: 'Started', render: (r) => new Date(r.started_at).toLocaleString() },
+          { key: 'started_at', label: 'Started (browser time)', render: (r) => new Date(r.started_at).toLocaleString() },
           { key: 'rows_affected', label: 'Rows affected' },
           { key: 'error', label: 'Error', render: (r) => r.error || '—' },
         ]}
@@ -74,7 +74,10 @@ export function SystemHealthPage() {
             <StatTile label="DB latency" value={`${data.db_latency_ms.toFixed(2)} ms`} />
             <StatTile label="Disk state" value={DISK_STATE_LABEL[data.disk_state]} />
             <StatTile label="Ingestion accepted (last hour)" value={data.ingestion_accepted_last_hour} />
-            <StatTile label="Ingestion rejected (last hour)" value={data.ingestion_rejected_last_hour} />
+            <StatTile
+              label="Ingestion rejected (last hour)"
+              value={`${data.ingestion_rejected_last_hour} (${data.ingestion_rejected_last_hour_rate.toFixed(1)}%)`}
+            />
             <StatTile label="Enabled policy rules" value={data.enabled_policy_rules} />
           </StatGrid>
           <ConnectionPoolsTable data={data} />

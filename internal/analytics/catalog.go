@@ -42,6 +42,10 @@ type DriftedProperty struct {
 
 type CatalogResult struct {
 	Entries []CatalogEntry `json:"entries"`
+	// UntrustedPct is the share of events in [from, to) with time_quality
+	// = 'untrusted', across all names — so per-event volume and rejection
+	// figures aren't read as more trustworthy than the underlying clocks.
+	UntrustedPct float64 `json:"untrusted_pct"`
 }
 
 // GetCatalog implements section 10.2 #6, plus Phase 1c's per-event volume
@@ -65,6 +69,7 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 	if err != nil {
 		return nil, err
 	}
+	markLastSparklineDayPartial(sparklines, loc)
 	rejections, err := rejectionsByName(ctx, pool, projectID, from, to)
 	if err != nil {
 		return nil, err
@@ -74,6 +79,13 @@ func GetCatalog(ctx context.Context, pool *pgxpool.Pool, projectID string, from,
 		return nil, err
 	}
 	applyCatalogVolume(result, counts, total, sparklines, rejections, drift)
+
+	untrustedPct, err := queryUntrustedPct(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	result.UntrustedPct = untrustedPct
+
 	return result, nil
 }
 
@@ -174,6 +186,20 @@ func sparklinesByName(ctx context.Context, pool *pgxpool.Pool, projectID string,
 		sparklines[name] = append(sparklines[name], DayCount{Day: day.Format("2006-01-02"), Count: count})
 	}
 	return sparklines, rows.Err()
+}
+
+// markLastSparklineDayPartial flags each name's last sparkline day as
+// partial when it's today — it's still accumulating events, not a
+// complete day, and would otherwise read as an artificial volume dip.
+func markLastSparklineDayPartial(sparklines map[string][]DayCount, loc *time.Location) {
+	for _, days := range sparklines {
+		if len(days) == 0 {
+			continue
+		}
+		if last := &days[len(days)-1]; isToday(last.Day, loc) {
+			last.Partial = true
+		}
+	}
 }
 
 // rejectionsByName sums event_rejection_stats across all codes for the

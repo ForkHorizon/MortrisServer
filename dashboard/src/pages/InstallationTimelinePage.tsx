@@ -34,7 +34,7 @@ function groupBySession(events: TimelineEvent[]): Array<{ sessionId: string; eve
 }
 
 const sessionColumns: Column<SessionEvent>[] = [
-  { key: 'effective_at', label: 'When', render: (r) => new Date(r.effective_at).toLocaleString() },
+  { key: 'effective_at', label: 'When (effective clock, browser time)', render: (r) => new Date(r.effective_at).toLocaleString() },
   { key: 'delta', label: '+elapsed', render: (r) => `+${r.deltaMs}ms` },
   { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
@@ -86,9 +86,9 @@ function InstallationDetail({ data }: { data: TimelineResult }) {
   return (
     <>
       <dl>
-        <dt>Registered</dt>
+        <dt>Registered (browser time)</dt>
         <dd>{new Date(data.registered_at).toLocaleString()}</dd>
-        <dt>Activated</dt>
+        <dt>Activated (browser time)</dt>
         <dd>{data.activated_at ? new Date(data.activated_at).toLocaleString() : 'Never'}</dd>
       </dl>
       {data.truncated && <p role="alert">Showing the most recent 500 events only.</p>}

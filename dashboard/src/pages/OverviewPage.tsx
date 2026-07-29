@@ -12,9 +12,10 @@ import { TrendChart } from '../components/TrendChart'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { DigestPanel } from '../components/DigestPanel'
 import { Entity } from '../components/Entity'
+import { TimeQualityNote } from '../components/TimeQualityNote'
 
 function dailyTrend(daily: OverviewDaily[], key: keyof OverviewDaily) {
-  return daily.map((d) => ({ day: d.day, count: Number(d[key]) }))
+  return daily.map((d) => ({ day: d.day, count: Number(d[key]), partial: d.partial }))
 }
 
 function OverviewStats({ data }: { data: Overview }) {
@@ -45,23 +46,32 @@ function OverviewStats({ data }: { data: Overview }) {
       />
       <StatTile label="Ingestion accepted" value={data.ingestion_accepted} trend={dailyTrend(data.daily, 'ingestion_accepted')} />
       <StatTile label="Ingestion duplicates" value={data.ingestion_duplicates} trend={dailyTrend(data.daily, 'ingestion_duplicates')} />
-      <StatTile label="Ingestion rejected" value={data.ingestion_rejected} trend={dailyTrend(data.daily, 'ingestion_rejected')} />
+      <StatTile
+        label="Ingestion rejected"
+        value={`${data.ingestion_rejected} (${data.ingestion_rejection_rate.toFixed(1)}%)`}
+        trend={dailyTrend(data.daily, 'ingestion_rejected')}
+      />
     </StatGrid>
   )
 }
 
-function OverviewEventsByKindChart({ data }: { data: Overview }) {
+function OverviewEventsByKindChart({ data, timezone }: { data: Overview; timezone: string }) {
   if (data.events_by_kind.length === 0) return null
   return (
-    <TrendChart
-      categories={data.events_by_kind.map((d) => d.day)}
-      series={[
-        { name: 'Product', data: data.events_by_kind.map((d) => d.product) },
-        { name: 'System', data: data.events_by_kind.map((d) => d.system) },
-      ]}
-      label="Events per day by kind"
-      type="stacked"
-    />
+    <>
+      {data.truncated && (
+        <p role="alert">This chart hit its internal 92-day cap and may be missing days — narrow the date range.</p>
+      )}
+      <TrendChart
+        categories={data.events_by_kind.map((d) => (d.partial ? `${d.day} (partial)` : d.day))}
+        series={[
+          { name: 'Product', data: data.events_by_kind.map((d) => d.product) },
+          { name: 'System', data: data.events_by_kind.map((d) => d.system) },
+        ]}
+        label={`Events per day by kind (${timezone})`}
+        type="stacked"
+      />
+    </>
   )
 }
 
@@ -108,8 +118,9 @@ export function OverviewPage() {
       <DigestPanel projectID={currentProject} />
       <DateRangeFields range={range} />
       <Freshness {...freshness} />
+      {data && <TimeQualityNote pct={data.untrusted_pct} />}
       {data && <OverviewStats data={data} />}
-      {data && <OverviewEventsByKindChart data={data} />}
+      {data && <OverviewEventsByKindChart data={data} timezone={timezone} />}
     </section>
   )
 }

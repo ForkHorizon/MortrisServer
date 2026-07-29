@@ -11,18 +11,27 @@ import (
 // event count, new installations, DAU/WAU/MAU, sessions, average observed
 // session duration, and ingestion health.
 type Overview struct {
-	ProductEvents                int64           `json:"product_events"`
-	NewInstallations             int64           `json:"new_installations"`
-	DailyActiveInstallations     int64           `json:"daily_active_installations"`
-	WeeklyActiveInstallations    int64           `json:"weekly_active_installations"`
-	MonthlyActiveInstallations   int64           `json:"monthly_active_installations"`
-	Sessions                     int64           `json:"sessions"`
-	AvgObservedSessionDurationMs float64         `json:"avg_observed_session_duration_ms"`
-	IngestionAccepted            int64           `json:"ingestion_accepted"`
-	IngestionDuplicates          int64           `json:"ingestion_duplicates"`
-	IngestionRejected            int64           `json:"ingestion_rejected"`
-	Daily                        []OverviewDaily `json:"daily"`
-	EventsByKind                 []EventKindDay  `json:"events_by_kind"`
+	ProductEvents                int64   `json:"product_events"`
+	NewInstallations             int64   `json:"new_installations"`
+	DailyActiveInstallations     int64   `json:"daily_active_installations"`
+	WeeklyActiveInstallations    int64   `json:"weekly_active_installations"`
+	MonthlyActiveInstallations   int64   `json:"monthly_active_installations"`
+	Sessions                     int64   `json:"sessions"`
+	AvgObservedSessionDurationMs float64 `json:"avg_observed_session_duration_ms"`
+	IngestionAccepted            int64   `json:"ingestion_accepted"`
+	IngestionDuplicates          int64   `json:"ingestion_duplicates"`
+	IngestionRejected            int64   `json:"ingestion_rejected"`
+	// IngestionRejectionRate is IngestionRejected / (accepted + duplicates
+	// + rejected) — the raw rejected count has no denominator on its own.
+	IngestionRejectionRate float64         `json:"ingestion_rejection_rate"`
+	Daily                  []OverviewDaily `json:"daily"`
+	EventsByKind           []EventKindDay  `json:"events_by_kind"`
+	// Truncated is true if EventsByKind hit its internal day cap and may
+	// be missing days.
+	Truncated bool `json:"truncated"`
+	// UntrustedPct is the share of product events in [from, to) with
+	// time_quality = 'untrusted'.
+	UntrustedPct float64 `json:"untrusted_pct"`
 }
 
 // GetOverview implements every definition in docs/metrics.md except
@@ -56,6 +65,17 @@ func GetOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from
 		return nil, err
 	}
 	o.EventsByKind = eventsByKind
+	o.Truncated = len(eventsByKind) >= trendDayLimit
+
+	if attempted := o.IngestionAccepted + o.IngestionDuplicates + o.IngestionRejected; attempted > 0 {
+		o.IngestionRejectionRate = float64(o.IngestionRejected) / float64(attempted) * 100
+	}
+
+	untrustedPct, err := queryUntrustedPct(ctx, pool, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	o.UntrustedPct = untrustedPct
 
 	return o, nil
 }
