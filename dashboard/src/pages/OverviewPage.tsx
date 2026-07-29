@@ -7,7 +7,7 @@ import { useAnomalies } from '../hooks/useAnomalies'
 import { useDateRange } from '../hooks/useDateRange'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
-import { StatGrid, StatTile } from '../components/StatTile'
+import { StatGrid, StatTile, computeDelta, type Delta } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { DigestPanel } from '../components/DigestPanel'
@@ -18,40 +18,97 @@ function dailyTrend(daily: OverviewDaily[], key: keyof OverviewDaily) {
   return daily.map((d) => ({ day: d.day, count: Number(d[key]), partial: d.partial }))
 }
 
-function OverviewStats({ data }: { data: Overview }) {
+// The immediately preceding period of the same length — [from, to) is
+// half-open, so the previous window ends exactly where this one starts.
+function previousPeriodParams(from: string, to: string) {
+  const durationMs = new Date(to).getTime() - new Date(from).getTime()
+  return { from: new Date(new Date(from).getTime() - durationMs).toISOString(), to: from }
+}
+
+type DeltaLookup = (key: keyof Overview) => Delta | null
+
+function ProductStats({ data, delta }: { data: Overview; delta: DeltaLookup }) {
   return (
-    <StatGrid>
-      <StatTile label="Product events" value={data.product_events} trend={dailyTrend(data.daily, 'product_events')} />
-      <StatTile label="New installations" value={data.new_installations} trend={dailyTrend(data.daily, 'new_installations')} />
-      <StatTile
-        label="Daily active installations"
-        value={data.daily_active_installations}
-        trend={dailyTrend(data.daily, 'daily_active_installations')}
-      />
-      <StatTile
-        label="Weekly active installations"
-        value={data.weekly_active_installations}
-        trend={dailyTrend(data.daily, 'weekly_active_installations')}
-      />
-      <StatTile
-        label="Monthly active installations"
-        value={data.monthly_active_installations}
-        trend={dailyTrend(data.daily, 'monthly_active_installations')}
-      />
-      <StatTile label="Sessions" value={data.sessions} trend={dailyTrend(data.daily, 'sessions')} />
-      <StatTile
-        label="Average observed session duration"
-        value={`${(data.avg_observed_session_duration_ms / 1000).toFixed(1)}s`}
-        trend={dailyTrend(data.daily, 'avg_observed_session_duration_ms')}
-      />
-      <StatTile label="Ingestion accepted" value={data.ingestion_accepted} trend={dailyTrend(data.daily, 'ingestion_accepted')} />
-      <StatTile label="Ingestion duplicates" value={data.ingestion_duplicates} trend={dailyTrend(data.daily, 'ingestion_duplicates')} />
-      <StatTile
-        label="Ingestion rejected"
-        value={`${data.ingestion_rejected} (${data.ingestion_rejection_rate.toFixed(1)}%)`}
-        trend={dailyTrend(data.daily, 'ingestion_rejected')}
-      />
-    </StatGrid>
+    <>
+      <h2>Product</h2>
+      <StatGrid>
+        <StatTile
+          label="Product events"
+          value={data.product_events}
+          trend={dailyTrend(data.daily, 'product_events')}
+          delta={delta('product_events')}
+        />
+        <StatTile
+          label="New installations"
+          value={data.new_installations}
+          trend={dailyTrend(data.daily, 'new_installations')}
+          delta={delta('new_installations')}
+        />
+        <StatTile
+          label="Daily active installations"
+          value={data.daily_active_installations}
+          trend={dailyTrend(data.daily, 'daily_active_installations')}
+          delta={delta('daily_active_installations')}
+        />
+        <StatTile
+          label="Weekly active installations"
+          value={data.weekly_active_installations}
+          trend={dailyTrend(data.daily, 'weekly_active_installations')}
+          delta={delta('weekly_active_installations')}
+        />
+        <StatTile
+          label="Monthly active installations"
+          value={data.monthly_active_installations}
+          trend={dailyTrend(data.daily, 'monthly_active_installations')}
+          delta={delta('monthly_active_installations')}
+        />
+        <StatTile label="Sessions" value={data.sessions} trend={dailyTrend(data.daily, 'sessions')} delta={delta('sessions')} />
+        <StatTile
+          label="Average observed session duration"
+          value={`${(data.avg_observed_session_duration_ms / 1000).toFixed(1)}s`}
+          trend={dailyTrend(data.daily, 'avg_observed_session_duration_ms')}
+          delta={delta('avg_observed_session_duration_ms')}
+        />
+      </StatGrid>
+    </>
+  )
+}
+
+function PipelineHealthStats({ data, delta }: { data: Overview; delta: DeltaLookup }) {
+  return (
+    <>
+      <h2>Pipeline health</h2>
+      <StatGrid>
+        <StatTile
+          label="Ingestion accepted"
+          value={data.ingestion_accepted}
+          trend={dailyTrend(data.daily, 'ingestion_accepted')}
+          delta={delta('ingestion_accepted')}
+        />
+        <StatTile
+          label="Ingestion duplicates"
+          value={data.ingestion_duplicates}
+          trend={dailyTrend(data.daily, 'ingestion_duplicates')}
+          delta={delta('ingestion_duplicates')}
+        />
+        <StatTile
+          label="Ingestion rejected"
+          value={`${data.ingestion_rejected} (${data.ingestion_rejection_rate.toFixed(1)}%)`}
+          trend={dailyTrend(data.daily, 'ingestion_rejected')}
+          delta={delta('ingestion_rejected')}
+        />
+      </StatGrid>
+    </>
+  )
+}
+
+function OverviewStats({ data, previous }: { data: Overview; previous: Overview | null }) {
+  const delta: DeltaLookup = (key) => (previous ? computeDelta(Number(data[key]), Number(previous[key])) : null)
+  return (
+    <>
+      <ProductStats data={data} delta={delta} />
+      <PipelineHealthStats data={data} delta={delta} />
+    </>
   )
 }
 
@@ -104,6 +161,18 @@ export function OverviewPage() {
   const { data } = overview
   const anomalies = useAnomalies(currentProject)
 
+  const prev = previousPeriodParams(from, to)
+  const fetchPreviousOverview = useCallback(
+    () => apiGet<Overview>('/api/v1/analytics/overview', { project: currentProject, from: prev.from, to: prev.to, timezone }),
+    [currentProject, prev.from, prev.to, timezone],
+  )
+  // Delta-only signal — kept out of the page's combined freshness stamp so a
+  // slow/failed comparison fetch can't make the primary stats look stale.
+  const previousOverview = useApiData<Overview>(
+    fetchPreviousOverview,
+    `overview:${currentProject}:${prev.from}:${prev.to}:${timezone}`,
+  )
+
   if (!currentProject) return <p>Select a project to view its overview.</p>
 
   // One combined stamp for the banner + tiles below: always the older of
@@ -119,7 +188,7 @@ export function OverviewPage() {
       <DateRangeFields range={range} />
       <Freshness {...freshness} />
       {data && <TimeQualityNote pct={data.untrusted_pct} />}
-      {data && <OverviewStats data={data} />}
+      {data && <OverviewStats data={data} previous={previousOverview.data} />}
       {data && <OverviewEventsByKindChart data={data} timezone={timezone} />}
     </section>
   )
