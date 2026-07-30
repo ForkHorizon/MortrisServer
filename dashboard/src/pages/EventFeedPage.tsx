@@ -63,54 +63,29 @@ function FeedFilters({
   )
 }
 
-export function EventFeedPage() {
-  const { currentProject } = useAuth()
-  const { get, set } = useURLParams()
-  const name = get('name')
-  const platform = get('platform')
-  const appVersion = get('app_version')
-  const installId = get('install_id')
-  const setName = (v: string) => set('name', v)
-  const setPlatform = (v: string) => set('platform', v)
-  const setAppVersion = (v: string) => set('app_version', v)
-  const setInstallId = (v: string) => set('install_id', v)
-  const [paused, setPaused] = useState(false)
-  const { events, error, loading, updatedAt, stale, hasMore, loadOlder } = useRecentEventsFeed(
-    currentProject,
-    { name, platform, appVersion, installId },
-    paused,
-  )
-
-  if (!currentProject) return <p>Select a project to view its live event feed.</p>
-
-  const hasFilters = Boolean(name || platform || appVersion || installId)
-
+function FeedResults({
+  events,
+  freshness,
+  hasFilters,
+  hasMore,
+  loadOlder,
+}: {
+  events: RecentEvent[]
+  freshness: { loading: boolean; error: string | null; stale: boolean; updatedAt: number | null }
+  hasFilters: boolean
+  hasMore: boolean
+  loadOlder: () => void
+}) {
   return (
-    <section aria-labelledby="feed-heading">
-      <h1 id="feed-heading">Live event feed</h1>
-      <p>Newest events first, refreshing every ~5 seconds. Shows one page at a time — use "Load older" for earlier events.</p>
-      <FeedFilters
-        name={name}
-        setName={setName}
-        platform={platform}
-        setPlatform={setPlatform}
-        appVersion={appVersion}
-        setAppVersion={setAppVersion}
-        installId={installId}
-        setInstallId={setInstallId}
-      />
-      <button type="button" onClick={() => setPaused((p) => !p)}>
-        {paused ? 'Resume' : 'Pause'}
-      </button>
-
-      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
+    <>
+      <Freshness {...freshness} />
       <DataTable
         caption="Most recent events"
         columns={feedColumns}
         rows={events}
         getRowKey={(r) => r.event_id}
         emptyState={
-          !hasFilters && !loading ? (
+          !hasFilters && !freshness.loading ? (
             <p>No events yet — SDK setup → this page will show your first event live.</p>
           ) : undefined
         }
@@ -120,6 +95,50 @@ export function EventFeedPage() {
           Load older
         </button>
       )}
+    </>
+  )
+}
+
+export function EventFeedPage() {
+  const { currentProject } = useAuth()
+  const { get, set } = useURLParams()
+  const name = get('name')
+  const platform = get('platform')
+  const appVersion = get('app_version')
+  const installId = get('install_id')
+  const [paused, setPaused] = useState(false)
+  const { events, error, loading, updatedAt, stale, hasMore, loadOlder } = useRecentEventsFeed(
+    currentProject,
+    { name, platform, appVersion, installId },
+    paused,
+  )
+
+  if (!currentProject) return <p>Select a project to view its live event feed.</p>
+
+  return (
+    <section aria-labelledby="feed-heading">
+      <h1 id="feed-heading">Live event feed</h1>
+      <p>Newest events first, refreshing every ~5 seconds. Shows one page at a time — use "Load older" for earlier events.</p>
+      <FeedFilters
+        name={name}
+        setName={(v) => set('name', v)}
+        platform={platform}
+        setPlatform={(v) => set('platform', v)}
+        appVersion={appVersion}
+        setAppVersion={(v) => set('app_version', v)}
+        installId={installId}
+        setInstallId={(v) => set('install_id', v)}
+      />
+      <button type="button" onClick={() => setPaused((p) => !p)}>
+        {paused ? 'Resume' : 'Pause'}
+      </button>
+      <FeedResults
+        events={events}
+        freshness={{ loading, error, stale, updatedAt }}
+        hasFilters={Boolean(name || platform || appVersion || installId)}
+        hasMore={hasMore}
+        loadOlder={loadOlder}
+      />
     </section>
   )
 }
