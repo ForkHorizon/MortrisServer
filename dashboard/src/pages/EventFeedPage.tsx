@@ -4,27 +4,21 @@ import { useAuth } from '../auth/useAuth'
 import { useRecentEventsFeed } from '../hooks/useRecentEventsFeed'
 import { useURLParams } from '../hooks/useURLParams'
 import { EventSelect } from '../components/EventSelect'
+import { PlatformSelect, AppVersionSelect } from '../components/DimensionSelects'
 import { Freshness } from '../components/Freshness'
 import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
+import { Timestamp } from '../components/Timestamp'
+import { PropertiesPreview } from '../components/PropertiesPreview'
 
 const feedColumns: Column<RecentEvent>[] = [
-  { key: 'received_at', label: 'Received (server clock, browser time)', render: (r) => new Date(r.received_at).toLocaleString() },
+  { key: 'received_at', label: 'Received (server clock)', render: (r) => <Timestamp value={r.received_at} mode="relative" /> },
   { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
   { key: 'install_id', label: 'Install', render: (r) => <Entity type="install" value={r.install_id} /> },
   { key: 'platform', label: 'Platform', render: (r) => <Entity type="platform" value={r.platform} /> },
   { key: 'app_version', label: 'Version', render: (r) => <Entity type="app_version" value={r.app_version} /> },
-  {
-    key: 'properties',
-    label: 'Properties',
-    render: (r) => (
-      <details>
-        <summary>view</summary>
-        <pre>{JSON.stringify(r.properties, null, 2)}</pre>
-      </details>
-    ),
-  },
+  { key: 'properties', label: 'Properties', render: (r) => <PropertiesPreview properties={r.properties} /> },
 ]
 
 function FeedFilters({
@@ -55,11 +49,11 @@ function FeedFilters({
       </div>
       <div className="field">
         <label htmlFor="feed-platform">Platform</label>
-        <input id="feed-platform" value={platform} onChange={(e) => setPlatform(e.target.value)} />
+        <PlatformSelect id="feed-platform" value={platform} onChange={setPlatform} />
       </div>
       <div className="field">
         <label htmlFor="feed-app-version">App version</label>
-        <input id="feed-app-version" value={appVersion} onChange={(e) => setAppVersion(e.target.value)} />
+        <AppVersionSelect id="feed-app-version" value={appVersion} onChange={setAppVersion} />
       </div>
       <div className="field">
         <label htmlFor="feed-install-id">Install ID</label>
@@ -89,6 +83,8 @@ export function EventFeedPage() {
 
   if (!currentProject) return <p>Select a project to view its live event feed.</p>
 
+  const hasFilters = Boolean(name || platform || appVersion || installId)
+
   return (
     <section aria-labelledby="feed-heading">
       <h1 id="feed-heading">Live event feed</h1>
@@ -108,7 +104,17 @@ export function EventFeedPage() {
       </button>
 
       <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
-      <DataTable caption="Most recent events" columns={feedColumns} rows={events} getRowKey={(r) => r.event_id} />
+      <DataTable
+        caption="Most recent events"
+        columns={feedColumns}
+        rows={events}
+        getRowKey={(r) => r.event_id}
+        emptyState={
+          !hasFilters && !loading ? (
+            <p>No events yet — SDK setup → this page will show your first event live.</p>
+          ) : undefined
+        }
+      />
       {hasMore && (
         <button type="button" onClick={loadOlder}>
           Load older

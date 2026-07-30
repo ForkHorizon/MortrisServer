@@ -247,6 +247,26 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request, sess *adm
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
 
+func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID := newRequestID()
+	start := time.Now()
+
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	result, err := analytics.GetDimensions(r.Context(), s.ReaderPool, projectID)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 func (s *Server) handleSystemHealth(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID := newRequestID()
 	start := time.Now()

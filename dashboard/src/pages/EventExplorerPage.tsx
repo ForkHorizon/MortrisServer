@@ -7,6 +7,7 @@ import { useDateRange } from '../hooks/useDateRange'
 import { useURLParams } from '../hooks/useURLParams'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { EventSelect } from '../components/EventSelect'
+import { PlatformSelect, AppVersionSelect } from '../components/DimensionSelects'
 import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { TrendChart } from '../components/TrendChart'
@@ -52,7 +53,7 @@ function EventExplorerFilters(f: Filters) {
       </div>
       <div className="field">
         <label htmlFor="filter-app-version">App version</label>
-        <input id="filter-app-version" value={f.appVersion} onChange={(e) => f.setAppVersion(e.target.value)} />
+        <AppVersionSelect id="filter-app-version" value={f.appVersion} onChange={f.setAppVersion} />
       </div>
       <div className="field">
         <label htmlFor="filter-build">Build number</label>
@@ -60,7 +61,7 @@ function EventExplorerFilters(f: Filters) {
       </div>
       <div className="field">
         <label htmlFor="filter-platform">Platform</label>
-        <input id="filter-platform" value={f.platform} onChange={(e) => f.setPlatform(e.target.value)} />
+        <PlatformSelect id="filter-platform" value={f.platform} onChange={f.setPlatform} />
       </div>
       <div className="field">
         <label htmlFor="filter-property-key">Property</label>

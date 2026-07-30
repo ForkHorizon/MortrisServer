@@ -5,6 +5,7 @@ import { useApiData } from '../hooks/useApiData'
 import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { DataTable } from '../components/DataTable'
+import { Timestamp } from '../components/Timestamp'
 
 const DISK_STATE_LABEL: Record<SystemHealth['disk_state'], string> = {
   normal: 'Normal',
@@ -45,7 +46,7 @@ function MaintenanceTable({ data }: { data: SystemHealth }) {
         caption="Most recent maintenance run per kind"
         columns={[
           { key: 'kind', label: 'Kind' },
-          { key: 'started_at', label: 'Started (browser time)', render: (r) => new Date(r.started_at).toLocaleString() },
+          { key: 'started_at', label: 'Started', render: (r) => <Timestamp value={r.started_at} mode="absolute" /> },
           { key: 'rows_affected', label: 'Rows affected' },
           { key: 'error', label: 'Error', render: (r) => r.error || '—' },
         ]}

@@ -25,9 +25,9 @@ export function Sparkline({ data }: { data: DayCount[] }) {
       role="img"
       aria-label={`Trend over ${data.length} days, latest ${last.count}${last.partial ? ' (partial day, still in progress)' : ''}`}
     >
-      <polyline points={points} fill="none" stroke="#2563eb" strokeWidth={1.5} />
+      <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth={1.5} />
       {last.partial && (
-        <circle cx={lastPoint.x} cy={lastPoint.y} r={2.5} fill="white" stroke="#2563eb" strokeWidth={1.5} />
+        <circle cx={lastPoint.x} cy={lastPoint.y} r={2.5} fill="var(--bg)" stroke="var(--accent)" strokeWidth={1.5} />
       )}
     </svg>
   )

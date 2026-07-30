@@ -12,6 +12,7 @@ import { Sparkline } from '../components/Sparkline'
 import { AnomalyBadge } from '../components/AnomalyBadge'
 import { Entity } from '../components/Entity'
 import { TimeQualityNote } from '../components/TimeQualityNote'
+import { Timestamp } from '../components/Timestamp'
 
 type SortKey = 'name' | 'count'
 
@@ -41,7 +42,7 @@ function CatalogDetail({ entry }: { entry: CatalogEntry }) {
   )
 }
 
-function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<CatalogEntry>[] {
+function catalogColumns(anomaliesByName: Map<string, EventAnomaly>, timezone: string): Column<CatalogEntry>[] {
   return [
     { key: 'name', label: 'Name', render: (r) => <Entity type="event" value={r.name} /> },
     { key: 'known', label: 'Status', render: (r) => (r.known ? 'Declared' : 'Auto-discovered (undeclared)') },
@@ -57,8 +58,8 @@ function catalogColumns(anomaliesByName: Map<string, EventAnomaly>): Column<Cata
     },
     {
       key: 'last_seen_at',
-      label: 'Last seen (browser time)',
-      render: (r) => (r.last_seen_at ? new Date(r.last_seen_at).toLocaleString() : '—'),
+      label: `Last seen (${timezone})`,
+      render: (r) => (r.last_seen_at ? <Timestamp value={r.last_seen_at} mode="absolute" timeZone={timezone} /> : '—'),
     },
     { key: 'details', label: 'Details', render: (r) => <CatalogDetail entry={r} /> },
   ]
@@ -116,7 +117,7 @@ export function CatalogPage() {
       {data && (
         <DataTable
           caption="Declared and auto-discovered events, with volume for the selected range"
-          columns={catalogColumns(anomaliesByName)}
+          columns={catalogColumns(anomaliesByName, timezone)}
           rows={sortedEntries}
           getRowKey={(r) => r.name}
         />

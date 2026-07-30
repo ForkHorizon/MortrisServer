@@ -3,6 +3,7 @@ import { init, use } from 'echarts/core'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { chartTheme, onColorSchemeChange } from './chartTheme'
 
 const registerEChartsComponents = use
 
@@ -27,14 +28,21 @@ function buildOption(
   horizontal: boolean,
   valueLabel?: (value: number, dataIndex: number) => string,
 ) {
-  const categoryAxis = { type: 'category' as const, data: categories }
-  const valueAxis = { type: 'value' as const, minInterval: 1 }
+  const theme = chartTheme()
+  const axisStyle = {
+    axisLine: { lineStyle: { color: theme.border } },
+    axisLabel: { color: theme.textMuted },
+    splitLine: { lineStyle: { color: theme.border } },
+  }
+  const categoryAxis = { type: 'category' as const, data: categories, ...axisStyle }
+  const valueAxis = { type: 'value' as const, minInterval: 1, ...axisStyle }
   return {
+    color: [theme.accent],
     grid: { left: horizontal ? 140 : 48, right: horizontal && valueLabel ? 110 : 16, top: 24, bottom: series.length > 1 ? 56 : 32 },
     xAxis: horizontal ? valueAxis : categoryAxis,
     yAxis: horizontal ? categoryAxis : valueAxis,
-    legend: series.length > 1 ? { bottom: 0 } : undefined,
-    tooltip: { trigger: 'axis' },
+    legend: series.length > 1 ? { bottom: 0, textStyle: { color: theme.text } } : undefined,
+    tooltip: { trigger: 'axis', backgroundColor: theme.bg, borderColor: theme.border, textStyle: { color: theme.text } },
     series: series.map((s) => ({
       name: s.name,
       type: type === 'line' ? 'line' : 'bar',
@@ -42,7 +50,7 @@ function buildOption(
       data: s.data,
       smooth: false,
       label: valueLabel
-        ? { show: true, position: horizontal ? 'right' : 'top', formatter: (p: { value: number; dataIndex: number }) => valueLabel(p.value, p.dataIndex) }
+        ? { show: true, position: horizontal ? 'right' : 'top', color: theme.text, formatter: (p: { value: number; dataIndex: number }) => valueLabel(p.value, p.dataIndex) }
         : undefined,
     })),
   }
@@ -76,11 +84,14 @@ export function TrendChart({
   useEffect(() => {
     if (!ref.current) return
     const chart = init(ref.current)
-    chart.setOption(buildOption(categories, series, type, horizontal, valueLabel))
+    const applyOption = () => chart.setOption(buildOption(categories, series, type, horizontal, valueLabel), true)
+    applyOption()
     const onResize = () => chart.resize()
     window.addEventListener('resize', onResize)
+    const stopWatchingScheme = onColorSchemeChange(applyOption)
     return () => {
       window.removeEventListener('resize', onResize)
+      stopWatchingScheme()
       chart.dispose()
     }
   }, [categories, series, type, horizontal, valueLabel])

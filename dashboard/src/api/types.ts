@@ -163,6 +163,11 @@ export interface CatalogResult {
   untrusted_pct: number
 }
 
+export interface DimensionsResult {
+  platforms: string[]
+  app_versions: string[]
+}
+
 export interface EventAnomaly {
   name: string
   today_count: number

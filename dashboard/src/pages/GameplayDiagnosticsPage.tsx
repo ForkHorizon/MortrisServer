@@ -6,6 +6,9 @@ import { DataTable } from '../components/DataTable'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
 import { StatGrid, StatTile } from '../components/StatTile'
+import { shortId } from '../components/Entity'
+import { Timestamp } from '../components/Timestamp'
+import { PropertiesPreview } from '../components/PropertiesPreview'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 
@@ -108,8 +111,8 @@ function AttemptSection({ project }: { project: string }) {
     <div className="field"><label htmlFor="attempt-id">Attempt ID</label><input id="attempt-id" value={attemptID} onChange={(e) => setAttemptID(e.target.value)} /><button type="button" onClick={() => setSelectedAttempt(attemptID)}>Load attempt</button></div>
     {selectedAttempt && <Freshness loading={timeline.loading} error={timeline.error} stale={timeline.stale} updatedAt={timeline.updatedAt} loadingLabel="Loading attempt…" />}
     {timeline.data && <DataTable caption={`Attempt ${timeline.data.attempt_id}`} rows={timeline.data.events} getRowKey={(r) => r.event_id} columns={[
-      { key: 'effective_at', label: 'Time', render: (r) => new Date(r.effective_at).toLocaleString() }, { key: 'name', label: 'Action' },
-      { key: 'properties', label: 'Payload', render: (r) => <code>{JSON.stringify(r.properties)}</code> },
+      { key: 'effective_at', label: 'Time', render: (r) => <Timestamp value={r.effective_at} mode="absolute" /> }, { key: 'name', label: 'Action' },
+      { key: 'properties', label: 'Payload', render: (r) => <PropertiesPreview properties={r.properties} /> },
       { key: 'missing_support_groups', label: 'Missing support by alternative', render: (r) => r.missing_support_groups?.map((group) => `[${group.join(', ')}]`).join(' OR ') ?? '' },
     ]} />}
   </>
@@ -125,14 +128,14 @@ function PlayersSection({ project, from, to }: { project: string; from: string; 
     <p>The player ID is the SDK installation ID, not a game account or person. Select it to inspect every raw event for that device.</p>
     <Freshness loading={players.loading} error={players.error} stale={players.stale} updatedAt={players.updatedAt} loadingLabel="Loading players…" />
     {players.data && <DataTable caption="Anonymous player devices" rows={players.data.players} getRowKey={(r) => r.install_id} columns={[
-      { key: 'install_id', label: 'Player ID', render: (r) => <button type="button" onClick={() => setSelectedPlayer(r.install_id)}>{r.install_id}</button> },
+      { key: 'install_id', label: 'Player ID', render: (r) => <button type="button" className="entity-id" title={r.install_id} onClick={() => setSelectedPlayer(r.install_id)}>{shortId(r.install_id)}</button> },
       { key: 'device_class', label: 'Phone' }, { key: 'os_version', label: 'OS' }, { key: 'device_total_memory_mb', label: 'Device RAM (MB)' },
       { key: 'last_allocated_memory_mb', label: 'Allocated RAM (MB)' }, { key: 'last_reserved_memory_mb', label: 'Reserved RAM (MB)' }, { key: 'last_mono_used_memory_mb', label: 'Mono RAM (MB)' }, { key: 'attempts', label: 'Attempts' }, { key: 'falls', label: 'Falls' },
     ]} />}
     {selectedPlayer && <Freshness loading={timeline.loading} error={timeline.error} stale={timeline.stale} updatedAt={timeline.updatedAt} loadingLabel="Loading player events…" />}
     {timeline.data && <DataTable caption={`Events for ${timeline.data.install_id}`} rows={timeline.data.events} getRowKey={(r) => r.event_id} columns={[
-      { key: 'effective_at', label: 'Time', render: (r) => new Date(r.effective_at).toLocaleString() }, { key: 'name', label: 'Event' },
-      { key: 'properties', label: 'Payload', render: (r) => <code>{JSON.stringify(r.properties)}</code> },
+      { key: 'effective_at', label: 'Time', render: (r) => <Timestamp value={r.effective_at} mode="absolute" /> }, { key: 'name', label: 'Event' },
+      { key: 'properties', label: 'Payload', render: (r) => <PropertiesPreview properties={r.properties} /> },
     ]} />}
   </>
 }

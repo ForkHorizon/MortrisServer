@@ -144,6 +144,10 @@ nav[aria-label='Dashboard sections'] a.active {
   gap: 0.3rem;
 }
 
+.entity-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .entity-copy {
   border: none;
   background: none;
@@ -344,6 +348,19 @@ details > summary {
   cursor: pointer;
   font-weight: 600;
   padding: 0.4rem 0;
+}
+
+.properties-preview details {
+  margin: 0.25rem 0 0;
+}
+.properties-preview summary {
+  font-weight: normal;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.properties-preview pre {
+  margin: 0.25rem 0 0;
 }
 
 .catalog-detail {
