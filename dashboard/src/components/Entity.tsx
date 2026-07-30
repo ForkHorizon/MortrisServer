@@ -16,6 +16,14 @@ const ROUTE: Record<EntityType, { path: string; param: string; carriesRange: boo
   platform: { path: '/events', param: 'platform', carriesRange: true },
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Only shortens values that actually look like a UUID (install/session
+// IDs) — event names, versions, etc. pass through unchanged.
+export function shortId(value: string): string {
+  return UUID_RE.test(value) ? `${value.slice(0, 8)}…` : value
+}
+
 export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -43,6 +51,8 @@ export function Entity({ type, value }: { type: EntityType; value: string }) {
   const { get } = useURLParams()
   if (!value) return null
   const route = ROUTE[type]
+  const display = shortId(value)
+  const truncated = display !== value
 
   let to: string | null = null
   if (route) {
@@ -58,7 +68,15 @@ export function Entity({ type, value }: { type: EntityType; value: string }) {
 
   return (
     <span className="entity">
-      {to ? <Link to={to}>{value}</Link> : value}
+      {to ? (
+        <Link to={to} className={truncated ? 'entity-id' : undefined} title={truncated ? value : undefined}>
+          {display}
+        </Link>
+      ) : (
+        <span className={truncated ? 'entity-id' : undefined} title={truncated ? value : undefined}>
+          {display}
+        </span>
+      )}
       <CopyButton value={value} />
     </span>
   )

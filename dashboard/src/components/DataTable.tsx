@@ -15,18 +15,20 @@ export function DataTable<T>({
   rows,
   caption,
   getRowKey,
+  emptyState,
 }: {
   columns: Column<T>[]
   rows: T[]
   caption: string
   getRowKey: (row: T, index: number) => string | number
+  emptyState?: ReactNode
 }) {
   // Defensive against `null` — Go's encoding/json emits null, not [], for
   // a nil slice, and internal/analytics doesn't guarantee every list
   // field is initialized before it's empty (see also the backend fix:
   // internal/policyadmin and internal/analytics now always return []).
   if (!rows || rows.length === 0) {
-    return <p>No data for this range.</p>
+    return <>{emptyState ?? <p>No data for this range.</p>}</>
   }
   return (
     <table>

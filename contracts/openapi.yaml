@@ -422,6 +422,13 @@ components:
               time_quality: { type: string, enum: [client, batch_adjusted, untrusted] }
               properties: { type: object }
 
+    DimensionsResult:
+      type: object
+      required: [platforms, app_versions]
+      properties:
+        platforms: { type: array, items: { type: string } }
+        app_versions: { type: array, items: { type: string } }
+
     CatalogResult:
       type: object
       required: [entries]
@@ -972,6 +979,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CatalogResult" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /api/v1/analytics/dimensions:
+    get:
+      summary: Distinct platform and app_version values observed in the last 90 days, for filter dropdowns
+      security: [{ dashboardSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Project"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DimensionsResult" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
 

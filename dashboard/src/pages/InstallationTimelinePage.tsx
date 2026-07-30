@@ -7,6 +7,8 @@ import { useApiData } from '../hooks/useApiData'
 import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
 import { Freshness } from '../components/Freshness'
+import { Timestamp } from '../components/Timestamp'
+import { PropertiesPreview } from '../components/PropertiesPreview'
 
 type SessionEvent = TimelineEvent & { deltaMs: number }
 
@@ -34,12 +36,12 @@ function groupBySession(events: TimelineEvent[]): Array<{ sessionId: string; eve
 }
 
 const sessionColumns: Column<SessionEvent>[] = [
-  { key: 'effective_at', label: 'When (effective clock, browser time)', render: (r) => new Date(r.effective_at).toLocaleString() },
+  { key: 'effective_at', label: 'When (effective clock)', render: (r) => <Timestamp value={r.effective_at} mode="absolute" /> },
   { key: 'delta', label: '+elapsed', render: (r) => `+${r.deltaMs}ms` },
   { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
   { key: 'time_quality', label: 'Clock quality' },
-  { key: 'properties', label: 'Properties', render: (r) => JSON.stringify(r.properties) },
+  { key: 'properties', label: 'Properties', render: (r) => <PropertiesPreview properties={r.properties} /> },
 ]
 
 function LookupForm({ inputId, setInputId, onSubmit }: { inputId: string; setInputId: (v: string) => void; onSubmit: () => void }) {
@@ -86,10 +88,10 @@ function InstallationDetail({ data }: { data: TimelineResult }) {
   return (
     <>
       <dl>
-        <dt>Registered (browser time)</dt>
-        <dd>{new Date(data.registered_at).toLocaleString()}</dd>
-        <dt>Activated (browser time)</dt>
-        <dd>{data.activated_at ? new Date(data.activated_at).toLocaleString() : 'Never'}</dd>
+        <dt>Registered</dt>
+        <dd><Timestamp value={data.registered_at} mode="absolute" /></dd>
+        <dt>Activated</dt>
+        <dd>{data.activated_at ? <Timestamp value={data.activated_at} mode="absolute" /> : 'Never'}</dd>
       </dl>
       {data.truncated && <p role="alert">Showing the most recent 500 events only.</p>}
       {sessions.map(({ sessionId, events }) => (

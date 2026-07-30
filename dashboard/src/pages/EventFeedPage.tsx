@@ -4,27 +4,21 @@ import { useAuth } from '../auth/useAuth'
 import { useRecentEventsFeed } from '../hooks/useRecentEventsFeed'
 import { useURLParams } from '../hooks/useURLParams'
 import { EventSelect } from '../components/EventSelect'
+import { PlatformSelect, AppVersionSelect } from '../components/DimensionSelects'
 import { Freshness } from '../components/Freshness'
 import { DataTable, type Column } from '../components/DataTable'
 import { Entity } from '../components/Entity'
+import { Timestamp } from '../components/Timestamp'
+import { PropertiesPreview } from '../components/PropertiesPreview'
 
 const feedColumns: Column<RecentEvent>[] = [
-  { key: 'received_at', label: 'Received (server clock, browser time)', render: (r) => new Date(r.received_at).toLocaleString() },
+  { key: 'received_at', label: 'Received (server clock)', render: (r) => <Timestamp value={r.received_at} mode="relative" /> },
   { key: 'name', label: 'Event', render: (r) => <Entity type="event" value={r.name} /> },
   { key: 'event_kind', label: 'Kind' },
   { key: 'install_id', label: 'Install', render: (r) => <Entity type="install" value={r.install_id} /> },
   { key: 'platform', label: 'Platform', render: (r) => <Entity type="platform" value={r.platform} /> },
   { key: 'app_version', label: 'Version', render: (r) => <Entity type="app_version" value={r.app_version} /> },
-  {
-    key: 'properties',
-    label: 'Properties',
-    render: (r) => (
-      <details>
-        <summary>view</summary>
-        <pre>{JSON.stringify(r.properties, null, 2)}</pre>
-      </details>
-    ),
-  },
+  { key: 'properties', label: 'Properties', render: (r) => <PropertiesPreview properties={r.properties} /> },
 ]
 
 function FeedFilters({
@@ -55,17 +49,53 @@ function FeedFilters({
       </div>
       <div className="field">
         <label htmlFor="feed-platform">Platform</label>
-        <input id="feed-platform" value={platform} onChange={(e) => setPlatform(e.target.value)} />
+        <PlatformSelect id="feed-platform" value={platform} onChange={setPlatform} />
       </div>
       <div className="field">
         <label htmlFor="feed-app-version">App version</label>
-        <input id="feed-app-version" value={appVersion} onChange={(e) => setAppVersion(e.target.value)} />
+        <AppVersionSelect id="feed-app-version" value={appVersion} onChange={setAppVersion} />
       </div>
       <div className="field">
         <label htmlFor="feed-install-id">Install ID</label>
         <input id="feed-install-id" value={installId} onChange={(e) => setInstallId(e.target.value)} />
       </div>
     </fieldset>
+  )
+}
+
+function FeedResults({
+  events,
+  freshness,
+  hasFilters,
+  hasMore,
+  loadOlder,
+}: {
+  events: RecentEvent[]
+  freshness: { loading: boolean; error: string | null; stale: boolean; updatedAt: number | null }
+  hasFilters: boolean
+  hasMore: boolean
+  loadOlder: () => void
+}) {
+  return (
+    <>
+      <Freshness {...freshness} />
+      <DataTable
+        caption="Most recent events"
+        columns={feedColumns}
+        rows={events}
+        getRowKey={(r) => r.event_id}
+        emptyState={
+          !hasFilters && !freshness.loading ? (
+            <p>No events yet — SDK setup → this page will show your first event live.</p>
+          ) : undefined
+        }
+      />
+      {hasMore && (
+        <button type="button" onClick={loadOlder}>
+          Load older
+        </button>
+      )}
+    </>
   )
 }
 
@@ -76,10 +106,6 @@ export function EventFeedPage() {
   const platform = get('platform')
   const appVersion = get('app_version')
   const installId = get('install_id')
-  const setName = (v: string) => set('name', v)
-  const setPlatform = (v: string) => set('platform', v)
-  const setAppVersion = (v: string) => set('app_version', v)
-  const setInstallId = (v: string) => set('install_id', v)
   const [paused, setPaused] = useState(false)
   const { events, error, loading, updatedAt, stale, hasMore, loadOlder } = useRecentEventsFeed(
     currentProject,
@@ -95,25 +121,24 @@ export function EventFeedPage() {
       <p>Newest events first, refreshing every ~5 seconds. Shows one page at a time — use "Load older" for earlier events.</p>
       <FeedFilters
         name={name}
-        setName={setName}
+        setName={(v) => set('name', v)}
         platform={platform}
-        setPlatform={setPlatform}
+        setPlatform={(v) => set('platform', v)}
         appVersion={appVersion}
-        setAppVersion={setAppVersion}
+        setAppVersion={(v) => set('app_version', v)}
         installId={installId}
-        setInstallId={setInstallId}
+        setInstallId={(v) => set('install_id', v)}
       />
       <button type="button" onClick={() => setPaused((p) => !p)}>
         {paused ? 'Resume' : 'Pause'}
       </button>
-
-      <Freshness loading={loading} error={error} stale={stale} updatedAt={updatedAt} />
-      <DataTable caption="Most recent events" columns={feedColumns} rows={events} getRowKey={(r) => r.event_id} />
-      {hasMore && (
-        <button type="button" onClick={loadOlder}>
-          Load older
-        </button>
-      )}
+      <FeedResults
+        events={events}
+        freshness={{ loading, error, stale, updatedAt }}
+        hasFilters={Boolean(name || platform || appVersion || installId)}
+        hasMore={hasMore}
+        loadOlder={loadOlder}
+      />
     </section>
   )
 }

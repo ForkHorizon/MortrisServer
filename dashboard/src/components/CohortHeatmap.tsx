@@ -4,6 +4,7 @@ import { HeatmapChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, VisualMapComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { RetentionCohort } from '../api/types'
+import { chartTheme, onColorSchemeChange } from './chartTheme'
 
 use([HeatmapChart, GridComponent, TooltipComponent, VisualMapComponent, CanvasRenderer])
 
@@ -34,12 +35,17 @@ function heatmapPoints(cohorts: RetentionCohort[], to: string): Array<[number, n
 }
 
 function heatmapOption(cohorts: RetentionCohort[], points: Array<[number, number, number]>) {
+  const theme = chartTheme()
+  const axisStyle = {
+    axisLine: { lineStyle: { color: theme.border } },
+    axisLabel: { color: theme.textMuted },
+  }
   return {
     grid: { left: 110, right: 16, top: 16, bottom: 56 },
     // No splitArea — a blank cell (window not yet elapsed) must read as
     // empty background, not a decorative shaded band that looks like data.
-    xAxis: { type: 'category', data: COLUMNS },
-    yAxis: { type: 'category', data: cohorts.map((c) => c.cohort_day) },
+    xAxis: { type: 'category', data: COLUMNS, ...axisStyle },
+    yAxis: { type: 'category', data: cohorts.map((c) => c.cohort_day), ...axisStyle },
     visualMap: {
       min: 0,
       max: 100,
@@ -47,9 +53,13 @@ function heatmapOption(cohorts: RetentionCohort[], points: Array<[number, number
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: ['#eff6ff', '#2563eb'] },
+      inRange: { color: [theme.bg, theme.accent] },
+      textStyle: { color: theme.text },
     },
     tooltip: {
+      backgroundColor: theme.bg,
+      borderColor: theme.border,
+      textStyle: { color: theme.text },
       formatter: (p: { data: [number, number, number] }) => `${cohorts[p.data[1]].cohort_day} — ${COLUMNS[p.data[0]]}: ${p.data[2]}%`,
     },
     series: [{ type: 'heatmap', data: points }],
@@ -65,11 +75,14 @@ export function CohortHeatmap({ cohorts, to }: { cohorts: RetentionCohort[]; to:
   useEffect(() => {
     if (!ref.current) return
     const chart = init(ref.current)
-    chart.setOption(heatmapOption(cohorts, heatmapPoints(cohorts, to)))
+    const applyOption = () => chart.setOption(heatmapOption(cohorts, heatmapPoints(cohorts, to)), true)
+    applyOption()
     const onResize = () => chart.resize()
     window.addEventListener('resize', onResize)
+    const stopWatchingScheme = onColorSchemeChange(applyOption)
     return () => {
       window.removeEventListener('resize', onResize)
+      stopWatchingScheme()
       chart.dispose()
     }
   }, [cohorts, to])
