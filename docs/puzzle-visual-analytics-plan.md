@@ -1,0 +1,400 @@
+# Puzzle visual analytics: plan
+
+Turn `/gameplay` from ID tables into a picture of the house. The goal is
+that somebody who has never read an analytics dashboard opens the page and
+can say, without help, which house is failing, which detail inside it is
+failing, and what the player actually did wrong.
+
+Scope is the existing `puzzle_gravity_test` project. Nothing here changes
+the ingestion contract, the strict catalogue rule, or the anonymity
+guarantees in `docs/puzzle-gravity-playtest-handoff.md`.
+
+## Where we are
+
+The data side is done. `puzzle_content_revisions/blocks/targets/rules` hold
+an immutable per-revision catalogue, `internal/analytics/puzzle_*.go`
+derives summary, scope, friction, daily rows, attempt-rule reconstruction
+and an anonymous device list, and every event carries `attempt_id`,
+`content_revision`, `city_id`, `house_id`, `wave_index`,
+`active_elapsed_ms`, `placed_block_count` and a monotonic
+`attempt_event_index`.
+
+The presentation side is not. `dashboard/src/pages/GameplayDiagnosticsPage.tsx`
+is four collapsed `<details>` blocks of numeric IDs. A designer reading
+`block_id 36 / target_id 36 / fall_rate 62%` learns nothing about which
+piece of the house that is.
+
+## The blocker: no block geometry
+
+`puzzle_content_blocks` stores one centre point per block
+(`local_x_milli`, `local_y_milli`) plus `visual_key`, `is_ground` and
+`order_in_layer`. A house of 56 centre points cannot be drawn. Every visual
+below depends on fixing this first.
+
+It is cheap to fix because the shapes are already computed elsewhere.
+`Assets/Scripts/Tools/EditorToolDesigner/Editor/EditorToolAiExport.cs`
+already calls `PixelTracingHelper.TraceSprite` and emits `TracedWorldPaths`,
+`WorldBounds`, pivot, pixels-per-unit and a ground plane per block. The
+analytics exporter reuses that builder.
+
+### Geometry attaches to a revision, it does not live inside it
+
+The obvious design — add shapes to the catalogue document — is wrong, and
+the reason matters.
+
+`content_revision` is the SHA-256 of that document. Adding fields mints a
+new revision, and events always resolve against their own. Every event
+already collected would keep pointing at the old shapeless revision and
+could never be drawn. The entire existing playtest would be invisible to
+the feature built to look at it.
+
+Shapes are not semantics. Where a block sits, which wave it belongs to,
+and what must be placed before it are meaning, and stay immutable. How
+that same block was drawn is a description of it, and can be attached
+afterwards without changing anything the revision asserts.
+
+So geometry is a separate additive upload against an existing revision:
+
+```json
+{
+  "schema_version": 1,
+  "content_revision": "09f3b91e…",
+  "blocks": [{
+    "city_id": 0, "house_id": 1, "block_id": 36,
+    "bounds_milli": { "min_x": -2100, "min_y": 14300, "max_x": -900, "max_y": 15600 },
+    "outline_milli": [[-2100,14300],[-900,14300],[-900,15600],[-2100,15600]]
+  }]
+}
+```
+
+- `outline_milli` is the silhouette in the same quantized milli-unit
+  space as `local_x_milli`/`local_y_milli`, capped at 64 points. Optional
+  — bounds alone draw a rectangle.
+- `bounds_milli` is required, and is what the renderer aggregates into a
+  house viewBox.
+- It may only describe blocks the revision already declares. A block it
+  does not recognise fails the whole upload rather than landing partial
+  shapes that would draw a broken house.
+- Re-uploading is safe, and re-importing the catalogue does not erase
+  geometry.
+
+Coordinates must be the **assembled-house** space, the same one
+`local_x_milli` already uses — not the exploded scheme space.
+`ScalingFactor` and `Spacing` are presentation-time values and must not
+leak into the upload.
+
+A house-level `ground_top_milli` was considered and dropped: the ground
+line is the lowest bound among blocks already flagged `is_ground`, so
+storing it would duplicate derivable state.
+
+Still forbidden, unchanged: no Unity objects, no sprite pixel data, no
+rule arrays in events, no drag frames, no per-frame coordinates.
+
+### Event additions (Puzzle side): none needed
+
+`hint_used` carries no `block_id`, which at first looks like a gap. It is
+not one: `HintService.UseHint()` reveals the whole-house blueprint, so
+there is no single detail to attribute it to. Adding a block would be
+inventing precision the game does not have.
+
+Hint pressure per detail is instead derived server-side, from the
+`placement_resolved` failures immediately preceding a `hint_used` in the
+same `attempt_id`. That is what "the player was stuck on this piece and
+gave up and asked" actually means, and it needs no client change.
+
+No other event field is missing for anything in this plan.
+
+### Coordinate system (resolved)
+
+Verified against all 125 house folders in the Puzzle repo:
+
+```
+block rect = position ± (spriteWidthPx, spriteHeightPx) / (2 × PPU)
+```
+
+with `PPU` read from the sprite's `spritePixelsToUnits` (120 everywhere
+checked) and the pivot centred at `0.5, 0.5`. Reconstructing a house this
+way reproduces its packed canvas
+(`assets.json`: `canvas_w / assets_dpi / ScalingFactor`) exactly for 104
+of 125 houses; the remaining 21 overshoot by about 1%, which is canvas
+cropping around transparent margins, not a different scale.
+
+`ScalingFactor` relates block space to packed-art pixel space, and
+`Spacing` is exploded-scheme presentation only. Neither belongs in the
+export.
+
+### Art tier: both layers
+
+The house view renders two layers over one coordinate space:
+
+1. **Art layer** — the house's real `static_packed.png` as the
+   background, so the page looks like the game.
+2. **Diagram layer** — block outlines on top, tinted by metric,
+   clickable, labelled. This is what makes "which detail sits in which
+   position" answerable at a glance.
+
+A toggle fades between them; the diagram alone stays fully legible for
+anyone who wants the schematic without the art. Per-piece sprites
+(`pieces/<visual_key>.png`) supply the thumbnail on the selected-detail
+panel.
+
+Assets are stored content-addressed on disk, keyed by
+`(project_id, content_revision)`, and served behind the existing
+dashboard auth. They are not embedded in the Go binary — the `go:embed`
+of `dashboard/dist` stays frontend-only. Budget is roughly 100 MB for
+house art plus the piece sprites.
+
+## Design principle
+
+One drill path, never a table as the entry point:
+
+```
+city  ->  house  ->  wave  ->  detail  ->  one attempt
+```
+
+Every level is a picture, every picture is clickable, every screen states
+its conclusion as a sentence before it shows a number. The existing
+`verdict` paragraph pattern in `GameplayDiagnosticsPage.tsx` is the model —
+extend it everywhere.
+
+Colour never carries meaning alone: every tint is paired with a number or
+a label, per the accessibility rule already in `index.css`.
+
+## The screens
+
+### Level 0 — house wall
+
+Grid of house cards, one per `(city_id, house_id)`, tinted green to red by
+fall rate, sorted worst first, attempt count as a badge, `display_label` as
+the name. Answers "which house is failing" without reading. Replaces the
+"City, house, and wave outcomes" table.
+
+### Level 1 — house X-ray
+
+The house drawn from block outlines, painted by a metric the user picks:
+fall rate, first-try failure rate, hint rate, tries-to-place, or
+time-to-place. Wave tabs ghost the blocks belonging to other waves, so the
+intended build order is visible.
+
+Clicking a block opens a panel with its picture, its numbers, and its rule
+in plain words, generated from `puzzle_content_rules`:
+
+> Detail 36 can be placed after 5, or after both 33 and 34.
+
+An optional overlay draws the support graph — arrows from required blocks
+to their target, one colour per OR alternative. This deliberately mirrors
+the editor's `Only Scheme` inspection view that designers already read.
+
+Replaces the "Target and detail friction" table.
+
+### Level 2 — drop-miss map
+
+For one block, scatter every `release_x_milli`/`release_y_milli` over the
+house silhouette, with the correct target outlined and dots coloured by
+`outcome`. Needs no new event fields.
+
+It separates three failures that look identical in a table:
+
+- a tight cluster offset from the slot — the art reads as sitting
+  somewhere it does not;
+- a wide scatter — snap radius too small;
+- a cluster on a different slot — ambiguous `compatible_block_ids`, the
+  player cannot tell the twins apart.
+
+### Level 3 — attempt replay
+
+`placed_block_ids` plus `attempt_event_index` make an attempt fully
+reconstructable, and `internal/analytics/puzzle_attempt.go` already
+rebuilds the placed set and `missing_support_groups`. Render it as a
+scrubber: each step draws the house's placed state, the piece in play, an
+arrow from the release point to the intended target, and a verdict badge.
+On `fell_missing_support`, flash the blocks that were missing.
+
+This is the "click an event, see the house, see that exact detail"
+requirement. Replaces the attempt timeline table.
+
+### Level 4 — supporting charts
+
+The four `outcome` values each imply a different fix, so label them by
+what they mean rather than by their enum value:
+
+| `outcome` | Shown as | What it points at |
+|---|---|---|
+| `fell_no_snap_target` | dropped nowhere near a slot | snap radius, affordance |
+| `fell_missing_support` | tried to build in the air | rule strictness or unclear build order |
+| `fell_missing_rule` | content bug | broken catalogue — should be ~0, worth an alert |
+| `returned` | changed their mind | hesitation, not failure |
+
+Alongside:
+
+- **Wave staircase** — attempts entering each wave as a shrinking ribbon.
+  Shows where a house loses people, replacing the daily table's role.
+- **Retry ladder** — distribution of placement attempts per block, sorted
+  by median. "Detail 36 takes 3.4 tries."
+- **Time-to-place** — per-block distribution from `detail_taken` to
+  `placement_resolved`, derived server-side from timestamps. The long tail
+  is the piece players stare at.
+- **Attempt pacing band** — active versus backgrounded intervals with
+  hints as pins, per attempt. Makes the rage-quit shape visible.
+- **Device and memory** — RAM against falls, and `memory_sample` over
+  active play time. Already collected, currently only shown as columns.
+
+## Server work
+
+- Schema (migration `0010`, additive, all columns nullable): four integer
+  `bounds_*_milli` columns plus a jsonb `outline_milli` on
+  `puzzle_content_blocks`. Bounds are plain columns rather than jsonb
+  because the renderer's viewBox is a MIN/MAX aggregate over a house.
+- Upload: `POST /api/v1/projects/{id}/puzzle-content/{revision}/geometry`,
+  project-admin plus CSRF, the same guard as the catalogue import. The
+  path revision is authoritative; a body claiming a different one is
+  refused as a mismatched export.
+- Read endpoints, all under the existing project-scoped auth:
+  - `GET /api/v1/analytics/gameplay/houses` — house wall leaderboard.
+  - `GET /api/v1/analytics/gameplay/houses/{city}/{house}/layout` —
+    geometry, waves, targets and rules for one revision, for rendering.
+  - `GET /api/v1/analytics/gameplay/houses/{city}/{house}/blocks` —
+    per-block metrics for the chosen paint metric.
+  - `GET /api/v1/analytics/gameplay/blocks/{blockID}/drops` — release
+    points for the drop-miss map.
+  - Attempt replay reuses the existing
+    `GET /api/v1/analytics/gameplay/attempts/{attemptID}`.
+
+- Asset serving: `GET /api/v1/projects/{projectID}/content/{revision}/house/{city}/{house}.png`
+  and `.../piece/{visualKey}.png`, plus an upload route alongside the
+  existing `POST .../puzzle-content` import.
+
+Current queries scan `events` with jsonb extraction. That is fine at
+playtest volume. Revisit with rollup tables only against measured
+pressure, per the plan's section 16.
+
+## Hosting: houseart.mortris.forkhorizon.com
+
+This view gets its own hostname, dedicated to `puzzle_gravity_test`.
+
+It stays **one binary, one port, one SPA bundle**. There is no second
+service to deploy, monitor or back up. The hostname is a routing and
+framing concern only:
+
+- nginx gains a server block for `houseart.mortris.forkhorizon.com`
+  proxying to `127.0.0.1:8090`, copied from `deploy/nginx/mortris.conf`.
+  `deploy/staging/nginx-sdk-test.conf` is the existing precedent for a
+  second Mortris hostname on the same box.
+- TLS: `certbot --nginx --expand` must be run with **every** ForkHorizon
+  hostname in one invocation, per the shared-cert gotcha already
+  documented in `deploy/README.md` step 13. Adding this domain alone
+  would drop the others from the cert.
+- The Go server checks the `Host` header: on `houseart.`, the SPA boots
+  straight into the house view with the project pinned to
+  `puzzle_gravity_test` and the project selector hidden. Everything else
+  — auth, sessions, CSRF, project access checks — is unchanged and
+  unconditional. The hostname is presentation, never authorization: a
+  user without access to `puzzle_gravity_test` gets the same refusal here
+  as anywhere else.
+- DNS: an A record for `houseart.mortris.forkhorizon.com` at the VPS IP,
+  and the hostname added to ForkHorizon's uptime checks alongside the
+  others.
+
+## Phasing
+
+1. **P0 — geometry. Done on `feat/puzzle-house-geometry`.** Migration
+   `0010`, the `PuzzleGeometry` type with validation,
+   `ApplyPuzzleGeometry`, the upload route, and
+   `tools/puzzle_geometry_export.py` which builds the payload from the
+   Unity assets. Verified against a real Postgres: all 103 houses and
+   7065 blocks import and attach, re-apply is idempotent, and an unknown
+   revision is refused. Not yet applied to production.
+2. **P1 — house wall and house X-ray.** Metric painting, wave tabs, block
+   panel with plain-language rules. On its own this replaces every table
+   currently on the page.
+3. **P2 — drop-miss map** and the plain-language fall-reason breakdown.
+4. **P3 — attempt replay scrubber.**
+5. **P4 — support-graph overlay, retry ladder, time-to-place, pacing band,
+   device and memory.**
+
+## Data: measured, not assumed
+
+Read via `MORTRIS_READER_DSN` on the production host (`/etc/mortris/env`,
+root-only; queries run server-side over SSH so the credential never
+leaves the box). Snapshot taken 2026-08-03, covering 2026-07-23 to
+2026-08-02.
+
+| | |
+|---|---|
+| events | 936 |
+| installations | 3 |
+| attempts | 45 |
+| distinct blocks ever placed | 153, of 7065 in the catalogue |
+| content revisions | 1 (`09f3b91e…`, 2026-07-22) |
+
+Placement outcomes:
+
+| outcome | count | share |
+|---|---|---|
+| `placed` | 298 | 81.6% |
+| `fell_no_snap_target` | 41 | 11.2% |
+| `fell_missing_support` | 26 | 7.1% |
+| `fell_missing_rule` | 0 | — |
+| `returned` | 0 | — |
+
+Two things fall out of this.
+
+**`fell_missing_rule` is zero.** The catalogue is clean — no house is
+asking for a rule that does not exist. This is the number to alert on if
+it ever leaves zero, and it belongs on the page as a standing green
+check rather than a row in a table.
+
+**`returned` is never emitted.** No call site in
+`SetBlockService`/`CheckTruePositionService` produces it, so the value is
+declared in the catalogue and documented but is dead. Either wire it —
+a detail picked up and deliberately put back is a real hesitation signal
+and distinct from a fall — or drop it from the docs. Until then the page
+must not show a "changed their mind" category that is structurally
+always zero.
+
+### The sample is thin, and the design has to say so
+
+Per `(house, block)` placement counts:
+
+| placements | blocks |
+|---|---|
+| 1 | 41 |
+| 2 | 56 |
+| 3–4 | 45 |
+| 5–9 | 11 |
+| 10+ | 0 |
+
+Three testers over ten days have touched 2% of the catalogue, and
+two-thirds of the blocks they did touch have two placements or fewer. A
+block painted bright red off two events is not a finding, it is noise
+wearing a confident colour — precisely the failure this whole page exists
+to avoid.
+
+So the paint layer is sample-size aware, not optional:
+
+- fewer than 5 placements — neutral grey, labelled "not enough plays
+  yet", never tinted;
+- 5 or more — tinted, with the raw count always shown beside the
+  percentage;
+- house-level and wave-level rollups, which do have usable volume today,
+  carry the colour until per-block counts grow.
+
+Observed fall rates, for the ramp: 18.4% overall, 9–22% across the six
+houses with real volume, and two houses at 67% on three and nine
+placements respectively — i.e. exactly the noise the grey rule
+suppresses. Provisional ramp: green under 10%, amber 10–25%, orange
+25–45%, red above 45%, re-fit once volume grows.
+
+This reorders the work. Aggregate views — the house wall, the
+outcome breakdown, the wave staircase — are meaningful **today**. The
+per-block X-ray paint is built now but will read mostly grey until more
+testers play, which is the honest state and should look like it.
+
+## Open questions
+
+- All 103 exported houses share one `content_revision` today. If houses
+  are later re-exported individually, the house wall must group by
+  `(city_id, house_id)` across revisions rather than by revision.
+- Asset upload has no route yet, so the deployment order in
+  `docs/puzzle-gravity-playtest-handoff.md` gains a step between
+  catalogue import and build publication.

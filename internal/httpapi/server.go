@@ -112,6 +112,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/projects/{id}/members/{accountID}", s.requireSession(s.handleProjectMemberDelete))
 	mux.HandleFunc("POST /api/v1/projects/{id}/sdk-test", s.requireSession(s.handleSDKTestControl))
 	mux.HandleFunc("POST /api/v1/projects/{id}/puzzle-content", s.requireSession(s.handlePuzzleContentImport))
+	mux.HandleFunc("POST /api/v1/projects/{id}/puzzle-content/{revision}/geometry", s.requireSession(s.handlePuzzleGeometryUpload))
 	mux.HandleFunc("GET /api/v1/accounts", s.requireSession(s.handleAccountsList))
 	mux.HandleFunc("POST /api/v1/accounts", s.requireSession(s.handleAccountCreate))
 	mux.HandleFunc("PATCH /api/v1/accounts/{id}", s.requireSession(s.handleAccountUpdate))
