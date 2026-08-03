@@ -260,9 +260,16 @@ Alongside:
   - Attempt replay reuses the existing
     `GET /api/v1/analytics/gameplay/attempts/{attemptID}`.
 
-- Asset serving: `GET /api/v1/projects/{projectID}/content/{revision}/house/{city}/{house}.png`
-  and `.../piece/{visualKey}.png`, plus an upload route alongside the
-  existing `POST .../puzzle-content` import.
+- Asset serving: `GET /gameplay/houses/{city}/{house}/art?revision=`,
+  with the image stored in Postgres and loaded by the
+  `import-puzzle-art` subcommand. Content-Type comes from an allowlist
+  checked at import, never from the stored row alone, and responses carry
+  `nosniff` plus an immutable cache header since a revision cannot change.
+- **Every migration that creates a table must also grant on it.** The
+  runtime pools use least-privilege roles, so `CREATE TABLE` alone leaves
+  the writer unable to touch it — `0011` shipped without grants and the
+  art import failed in production with "permission denied" until `0012`
+  added them. `0006` is the same fix for the `0004` tables.
 
 Current queries scan `events` with jsonb extraction. That is fine at
 playtest volume. Revisit with rollup tables only against measured
@@ -309,9 +316,11 @@ framing concern only:
    Unity assets. Verified against a real Postgres: all 103 houses and
    7065 blocks import and attach, re-apply is idempotent, and an unknown
    revision is refused. Not yet applied to production.
-2. **P1 — house wall and house X-ray.** Metric painting, wave tabs, block
-   panel with plain-language rules. On its own this replaces every table
-   currently on the page.
+2. **P1 — house wall and house X-ray. Done and deployed.** Metric
+   painting, wave tabs, block panel with plain-language rules, and the
+   art layer with its art / diagram / both toggle. Migrations `0011`
+   (art storage) and `0012` (its role grants). Replaces every table
+   previously on the page.
 3. **P2 — drop-miss map** and the plain-language fall-reason breakdown.
 4. **P3 — attempt replay scrubber.**
 5. **P4 — support-graph overlay, retry ladder, time-to-place, pacing band,
