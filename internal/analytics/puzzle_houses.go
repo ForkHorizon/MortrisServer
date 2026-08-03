@@ -1,0 +1,115 @@
+package analytics
+
+import (
+	"context"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// minPlacementsForRate is the point below which a per-block or per-house
+// fall rate is noise rather than a finding.
+//
+// Measured 2026-08-03 against the live playtest: three testers had touched
+// 153 of 7065 blocks, and two thirds of those had two placements or fewer.
+// A block painted red off two events looks exactly like a block painted red
+// off two hundred, which is the failure this whole view exists to prevent.
+// Below this count the API still returns the raw counts and the dashboard
+// renders the block neutral, labelled as not yet played enough.
+const minPlacementsForRate = 5
+
+type PuzzleHouseSummary struct {
+	CityID       int     `json:"city_id"`
+	HouseID      int     `json:"house_id"`
+	DisplayLabel string  `json:"display_label"`
+	Attempts     int64   `json:"attempts"`
+	Placements   int64   `json:"placements"`
+	Falls        int64   `json:"falls"`
+	Hints        int64   `json:"hints"`
+	FallRate     float64 `json:"fall_rate"`
+	// RateIsReliable is false when Placements < minPlacementsForRate. The
+	// dashboard must not colour a house by an unreliable rate.
+	RateIsReliable bool `json:"rate_is_reliable"`
+	HasGeometry    bool `json:"has_geometry"`
+}
+
+type PuzzleHouseList struct {
+	ContentRevision string               `json:"content_revision"`
+	Houses          []PuzzleHouseSummary `json:"houses"`
+}
+
+// latestPuzzleRevision returns the newest imported catalogue revision.
+// Layout is drawn from it; event semantics still resolve per event.
+func latestPuzzleRevision(ctx context.Context, pool *pgxpool.Pool, projectID string) (string, error) {
+	var revision string
+	err := pool.QueryRow(ctx, `SELECT content_revision FROM puzzle_content_revisions WHERE project_id=$1 ORDER BY imported_at DESC LIMIT 1`, projectID).Scan(&revision)
+	return revision, err
+}
+
+// GetPuzzleHouses lists every house in the catalogue with its play
+// outcomes, including houses nobody has opened — "nobody has played this"
+// is itself a finding, and hiding untouched houses would make the wall
+// silently describe only the corner of the game that happens to have data.
+func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (*PuzzleHouseList, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	revision, err := latestPuzzleRevision(ctx, pool, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result := &PuzzleHouseList{ContentRevision: revision, Houses: []PuzzleHouseSummary{}}
+	rows, err := pool.Query(ctx, puzzleHousesQuery, projectID, revision, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row PuzzleHouseSummary
+		if err := rows.Scan(&row.CityID, &row.HouseID, &row.DisplayLabel, &row.HasGeometry,
+			&row.Attempts, &row.Placements, &row.Falls, &row.Hints); err != nil {
+			return nil, err
+		}
+		if row.Placements > 0 {
+			row.FallRate = float64(row.Falls) / float64(row.Placements)
+		}
+		row.RateIsReliable = row.Placements >= minPlacementsForRate
+		result.Houses = append(result.Houses, row)
+	}
+	return result, rows.Err()
+}
+
+// The catalogue is the spine of this query, not the events, so untouched
+// houses survive the join. display_label lives only inside the stored
+// catalogue document, hence the jsonb path lookup per house.
+const puzzleHousesQuery = `
+WITH house AS (
+    SELECT city_id, house_id,
+           bool_or(bounds_min_x_milli IS NOT NULL) has_geometry
+    FROM puzzle_content_blocks
+    WHERE project_id=$1 AND content_revision=$2
+    GROUP BY 1,2
+), ev AS (
+    SELECT (properties->>'city_id')::int city_id,
+           (properties->>'house_id')::int house_id,
+           name, properties
+    FROM events
+    WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
+      AND properties ? 'house_id' AND properties ? 'attempt_id'
+), agg AS (
+    SELECT city_id, house_id,
+           COUNT(DISTINCT properties->>'attempt_id') attempts,
+           COUNT(*) FILTER (WHERE name='placement_resolved') placements,
+           COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%') falls,
+           COUNT(*) FILTER (WHERE name='hint_used') hints
+    FROM ev GROUP BY 1,2
+)
+SELECT h.city_id, h.house_id,
+       COALESCE(jsonb_path_query_first(r.catalog,
+           ('$.cities[*] ? (@.city_id == ' || h.city_id || ').houses[*] ? (@.house_id == ' || h.house_id || ').display_label')::jsonpath
+       ) #>> '{}', '') display_label,
+       h.has_geometry,
+       COALESCE(a.attempts,0), COALESCE(a.placements,0), COALESCE(a.falls,0), COALESCE(a.hints,0)
+FROM house h
+JOIN puzzle_content_revisions r ON r.project_id=$1 AND r.content_revision=$2
+LEFT JOIN agg a ON a.city_id=h.city_id AND a.house_id=h.house_id
+ORDER BY COALESCE(a.placements,0) DESC, h.city_id, h.house_id`

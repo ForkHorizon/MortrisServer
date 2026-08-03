@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: '/retention', label: 'Retention', end: false },
   { to: '/installations', label: 'Installation Timeline', end: false, managerOnly: true },
   { to: '/catalog', label: 'Catalog', end: false },
+  { to: '/houses', label: 'Houses', end: false, managerOnly: true },
   { to: '/gameplay', label: 'Gameplay Diagnostics', end: false, managerOnly: true },
   { to: '/system', label: 'System Health', end: false },
   { to: '/policy', label: 'Policy', end: false },

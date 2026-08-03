@@ -44,6 +44,8 @@ func main() {
 		err = runParityReport(ctx, cfg, os.Args[2:])
 	case "create-admin":
 		err = runCreateAdmin(ctx, cfg, os.Args[2:])
+	case "import-puzzle-geometry":
+		err = runImportPuzzleGeometry(ctx, cfg, os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", os.Args[1])
 		os.Exit(2)

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/ForkHorizon/Mortris/internal/adminauth"
@@ -122,6 +123,62 @@ func (s *Server) handleGameplayDiagnostics(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, http.StatusOK, result)
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+func (s *Server) handlePuzzleHouses(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, from, to, err := s.gameplayRange(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	result, err := analytics.GetPuzzleHouses(r.Context(), s.ReaderPool, projectID, from, to)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, from, to, err := s.gameplayRange(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	cityID, err := strconv.Atoi(r.PathValue("city"))
+	if err != nil {
+		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "city must be an integer"))
+		return
+	}
+	houseID, err := strconv.Atoi(r.PathValue("house"))
+	if err != nil {
+		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "house must be an integer"))
+		return
+	}
+	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+// gameplayRange resolves the project and date range both house endpoints
+// need, so neither can accidentally skip the project-access check.
+func (s *Server) gameplayRange(sess *adminauth.Session, r *http.Request) (string, time.Time, time.Time, error) {
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		return "", time.Time{}, time.Time{}, err
+	}
+	from, to, err := analytics.ParseDateRange(r.URL.Query())
+	if err != nil {
+		return "", time.Time{}, time.Time{}, err
+	}
+	return projectID, from, to, nil
 }
 
 func (s *Server) handleGameplayAttempt(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
