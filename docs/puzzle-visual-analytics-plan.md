@@ -365,8 +365,20 @@ framing concern only:
    two of five houses cannot currently establish. Adding it would put an
    arrow in the wrong place on exactly the houses that most need looking
    at.
-5. **P4 — support-graph overlay, retry ladder, time-to-place, pacing band,
-   device and memory.**
+5. **P4 — support-graph overlay. Done.** Selecting a detail and turning
+   the overlay on draws a line from every detail that could hold it up,
+   one colour per OR alternative, with a matching G1/G2 key beside the
+   plain-language rule. It mirrors the editor's "Only Scheme" view that
+   designers already read.
+
+   This is drawn from the catalogue, not from events, so unlike the rest
+   of P4 it works at full fidelity today regardless of how thin the
+   playtest sample is.
+6. **P4 remainder — retry ladder, time-to-place, pacing band, device and
+   memory.** Deliberately not built yet. Every one of these is an
+   event-volume chart, and with three testers they would render as the
+   same "not enough plays" grey the block paint already shows. They are
+   worth building when the sample grows, not before.
 
 ## Data: measured, not assumed
 

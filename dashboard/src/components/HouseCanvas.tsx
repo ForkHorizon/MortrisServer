@@ -1,5 +1,6 @@
 import type { PuzzleDrop, PuzzleHouseBlock } from '../api/houseTypes'
 import { UNPLAYED, paintFor } from './houseColors'
+import { DropLayer, SupportLayer, supportColorByBlock } from './houseOverlays'
 
 // Milli-unit world space is y-up; SVG is y-down. Negating y at render time
 // keeps every stored coordinate in the one space the exporter, the
@@ -62,13 +63,15 @@ type Props = {
   active?: number | null
   /** Blocks the active detail was waiting on. */
   missing?: Set<number>
+  /** Placement rule of the selected detail, drawn as a dependency graph. */
+  support?: { targetBlockID: number; groups: number[][] } | null
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
 // union of block bounds — so it is placed at that rect with no stored
 // offset. preserveAspectRatio="none" is correct here precisely because
 // the two rects are the same rect; letterboxing would misalign it.
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing }: Props) {
+export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing, support }: Props) {
   const extent = extentOf(blocks)
   if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
   const width = extent.maxX - extent.minX
@@ -76,6 +79,7 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
   const pad = width * 0.02
   const box = `${extent.minX - pad} ${-extent.maxY - pad} ${width + pad * 2} ${height + pad * 2}`
   const strokeWidth = width / 220
+  const supportColors = supportColorByBlock(support)
   const showArt = artUrl && mode !== 'diagram'
   const showDiagram = mode !== 'art'
   return (
@@ -102,8 +106,10 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
             interactive={interactive}
             onSelect={onSelect}
             replay={placed ? { standing: placed.has(block.block_id), active: active === block.block_id, missing: !!missing?.has(block.block_id) } : undefined}
+            supportColor={supportColors.get(block.block_id)}
           />
         ))}
+      {support && <SupportLayer blocks={blocks} support={support} scale={strokeWidth} />}
       {drops && drops.length > 0 && <DropLayer drops={drops} scale={strokeWidth} />}
     </svg>
   )
@@ -120,6 +126,7 @@ type ShapeProps = {
   interactive: boolean
   onSelect?: (blockID: number) => void
   replay?: ReplayState
+  supportColor?: string
 }
 
 // In replay the colour stops meaning "how often this falls" and starts
@@ -137,7 +144,7 @@ function replayPaint(replay: ReplayState): { color: string; opacity: number; lab
   return { color: REPLAY_STANDING, opacity: 0.07, label: 'not placed yet' }
 }
 
-function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect, replay }: ShapeProps) {
+function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect, replay, supportColor: supportStroke }: ShapeProps) {
   const points = pathFor(block)
   if (!points) return null
   if (replay) {
@@ -164,8 +171,8 @@ function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interacti
       points={points}
       fill={paint.color}
       fillOpacity={fillOpacity(paint.reliable, dimmed, overArt)}
-      stroke={isSelected ? '#ffffff' : '#0b0d10'}
-      strokeWidth={isSelected ? strokeWidth * 3 : strokeWidth}
+      stroke={isSelected ? '#ffffff' : supportStroke ?? '#0b0d10'}
+      strokeWidth={isSelected || supportStroke ? strokeWidth * 2.5 : strokeWidth}
       strokeOpacity={dimmed ? 0.2 : 1}
       tabIndex={clickable ? 0 : undefined}
       role={clickable ? 'button' : undefined}
@@ -183,56 +190,5 @@ function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interacti
           : undefined
       }
     />
-  )
-}
-
-// Outcome colours for drop dots. Deliberately not the fall-rate ramp:
-// these encode *what happened*, not *how bad it is*, and reusing the ramp
-// would suggest an ordering between reasons that does not exist.
-const DROP_COLOR: Record<string, string> = {
-  placed: '#5aa96b',
-  fell_no_snap_target: '#e8a33d',
-  fell_missing_support: '#d94f4f',
-  fell_missing_rule: '#b06fd0',
-  returned: '#7a8faf',
-}
-
-type DropLayerProps = { drops: PuzzleDrop[]; scale: number }
-
-// Each dot is where a player let go; the line runs to the slot they were
-// aiming at. The line is what turns a cloud of dots into a direction —
-// "everyone releases below the slot" is invisible without it.
-export function DropLayer({ drops, scale }: DropLayerProps) {
-  return (
-    <g aria-hidden="true">
-      {drops.map((drop, i) => {
-        const color = DROP_COLOR[drop.outcome] ?? '#9aa1ad'
-        const hasTarget = drop.target_id >= 0
-        return (
-          <g key={`${drop.attempt_id}-${drop.block_id}-${i}`}>
-            {hasTarget && (
-              <line
-                x1={drop.release_x_milli}
-                y1={-drop.release_y_milli}
-                x2={drop.target_x_milli}
-                y2={-drop.target_y_milli}
-                stroke={color}
-                strokeWidth={scale * 0.5}
-                strokeOpacity={0.55}
-              />
-            )}
-            <circle
-              cx={drop.release_x_milli}
-              cy={-drop.release_y_milli}
-              r={scale * 2}
-              fill={color}
-              fillOpacity={0.9}
-              stroke="#0b0d10"
-              strokeWidth={scale * 0.3}
-            />
-          </g>
-        )
-      })}
-    </g>
   )
 }

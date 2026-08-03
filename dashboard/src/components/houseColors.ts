@@ -62,3 +62,20 @@ export function ruleSentence(blockID: number, groups: number[][]): string {
   if (alternatives.length === 1) return `Detail ${blockID} can be placed after ${alternatives[0]}.`
   return `Detail ${blockID} can be placed after ${alternatives.slice(0, -1).join(', after ')}, or after ${alternatives[alternatives.length - 1]}.`
 }
+
+// One colour per OR alternative in a placement rule. Deliberately cool
+// and distinct from both the fall-rate ramp and the drop-outcome colours:
+// these encode structure ("which way you could have built it"), not
+// severity, and reusing either scale would imply an ordering between
+// alternatives that does not exist.
+const SUPPORT_COLORS = ['#5b9bff', '#4fb3a3', '#a583e0', '#d98cc0', '#8fa8c8']
+
+export function supportColor(groupIndex: number): string {
+  return SUPPORT_COLORS[groupIndex % SUPPORT_COLORS.length]
+}
+
+// Mirrors the editor's "Only Scheme" inspection view, which designers
+// already read: G1, G2 … per alternative.
+export function supportGroupLabel(groupIndex: number): string {
+  return `G${groupIndex + 1}`
+}

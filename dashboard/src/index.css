@@ -470,3 +470,7 @@ th {
 .attempt-list button { width: 100%; text-align: left; }
 .attempt-list button[aria-pressed='true'] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 details.attempts { margin-top: 1.5rem; }
+
+/* Support graph key */
+.support-key { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.support-key li { display: flex; align-items: center; gap: 0.45rem; }

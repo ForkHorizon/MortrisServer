@@ -10,5 +10,6 @@ export function useHouseControls() {
   const [selected, setSelected] = useState<number | null>(null)
   const [artMode, setArtMode] = useState<ArtMode>('both')
   const [showDrops, setShowDrops] = useState(false)
-  return { wave, setWave, selected, setSelected, artMode, setArtMode, showDrops, setShowDrops }
+  const [showSupport, setShowSupport] = useState(false)
+  return { wave, setWave, selected, setSelected, artMode, setArtMode, showDrops, setShowDrops, showSupport, setShowSupport }
 }

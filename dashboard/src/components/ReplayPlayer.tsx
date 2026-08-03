@@ -37,6 +37,47 @@ function eventWords(name: string): string {
   return EVENT_WORDS[name] ?? name.replace(/_/g, ' ')
 }
 
+type ControlProps = {
+  index: number
+  last: number
+  total: number
+  playing: boolean
+  setPlaying: (v: boolean) => void
+  setIndex: (updater: (i: number) => number) => void
+}
+
+function ReplayControls({ index, last, total, playing, setPlaying, setIndex }: ControlProps) {
+  // Functional updates, not index +/- 1: a handler closes over the index
+  // from its render, so two clicks before a re-render would otherwise
+  // both compute the same next step.
+  const step = (delta: number) => {
+    setPlaying(false)
+    setIndex((i) => Math.min(last, Math.max(0, i + delta)))
+  }
+  return (
+    <div className="replay-controls">
+      <button type="button" onClick={() => setPlaying(!playing)} disabled={index >= last && !playing}>
+        {playing ? 'Pause' : 'Play'}
+      </button>
+      <button type="button" onClick={() => step(-1)} disabled={index === 0}>
+        Back
+      </button>
+      <button type="button" onClick={() => step(1)} disabled={index >= last}>
+        Next
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={last}
+        value={index}
+        aria-label="Replay step"
+        onChange={(e) => { setPlaying(false); setIndex(() => Number(e.target.value)) }}
+      />
+      <span className="muted">step {index + 1} of {total}</span>
+    </div>
+  )
+}
+
 export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; blocks: PuzzleHouseBlock[]; label: string }) {
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -66,29 +107,14 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
         missing={new Set(missingBlocks(step))}
       />
       <p className="verdict">{stepSentence(step)}</p>
-      <div className="replay-controls">
-        <button type="button" onClick={() => setPlaying(!playing)} disabled={index >= last && !playing}>
-          {playing ? 'Pause' : 'Play'}
-        </button>
-        {/* Functional updates, not index +/- 1: the handler closes over
-            the index from its render, so two clicks before a re-render
-            would both compute the same next step. */}
-        <button type="button" onClick={() => { setPlaying(false); setIndex((i) => Math.max(0, i - 1)) }} disabled={index === 0}>
-          Back
-        </button>
-        <button type="button" onClick={() => { setPlaying(false); setIndex((i) => Math.min(last, i + 1)) }} disabled={index >= last}>
-          Next
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={last}
-          value={index}
-          aria-label="Replay step"
-          onChange={(e) => { setPlaying(false); setIndex(Number(e.target.value)) }}
-        />
-        <span className="muted">step {index + 1} of {replay.steps.length}</span>
-      </div>
+      <ReplayControls
+        index={index}
+        last={last}
+        total={replay.steps.length}
+        playing={playing}
+        setPlaying={setPlaying}
+        setIndex={setIndex}
+      />
       {replay.truncated && <p className="muted">Only the first 500 events of this attempt are shown.</p>}
     </div>
   )

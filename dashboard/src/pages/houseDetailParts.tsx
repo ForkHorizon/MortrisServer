@@ -3,13 +3,13 @@ import type { PuzzleDrop, PuzzleDropMap, PuzzleHouseBlock, PuzzleHouseDetail } f
 import type { HouseControls } from './useHouseControls'
 import { AttemptPicker } from '../components/AttemptPicker'
 import { HouseCanvas } from '../components/HouseCanvas'
-import { outcomeWords, paintFor, percent, ruleSentence } from '../components/houseColors'
+import { outcomeWords, paintFor, percent, ruleSentence, supportColor, supportGroupLabel } from '../components/houseColors'
 import { StatGrid, StatTile } from '../components/StatTile'
 
 // The pieces of the house detail view. Split out of HouseDetailPage.tsx
 // so the page itself stays a thin shell over the data hook.
 
-export function BlockPanel({ block }: { block: PuzzleHouseBlock }) {
+export function BlockPanel({ block, showSupport = false }: { block: PuzzleHouseBlock; showSupport?: boolean }) {
   const paint = paintFor(block.fall_rate, block.rate_is_reliable, block.placements)
   const reasons = Object.entries(block.falls_by_reason).sort((a, b) => b[1] - a[1])
   return (
@@ -45,7 +45,24 @@ export function BlockPanel({ block }: { block: PuzzleHouseBlock }) {
       )}
       <h3>Placement rule</h3>
       <p>{ruleSentence(block.block_id, block.required_groups)}</p>
+      {showSupport && block.required_groups.length > 0 && <SupportKey groups={block.required_groups} />}
     </div>
+  )
+}
+
+// The colour key matches the lines drawn on the house, so the sentence
+// above and the picture beside it name the same alternatives.
+function SupportKey({ groups }: { groups: number[][] }) {
+  return (
+    <ul className="support-key">
+      {groups.map((group, index) => (
+        <li key={index}>
+          <span className="house-card-swatch small" style={{ background: supportColor(index) }} aria-hidden="true" />
+          <strong>{supportGroupLabel(index)}</strong>{' '}
+          {group.length === 1 ? `detail ${group[0]}` : `details ${group.join(' and ')} together`}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -128,6 +145,8 @@ type ToolbarProps = {
   onArtMode: (m: ArtMode) => void
   showDrops: boolean
   onShowDrops: (v: boolean) => void
+  showSupport: boolean
+  onShowSupport: (v: boolean) => void
   dropMap: PuzzleDropMap | null | undefined
   scoped: boolean
 }
@@ -142,7 +161,13 @@ export function HouseToolbar(p: ToolbarProps) {
           {p.showDrops ? 'Hide where players let go' : 'Show where players let go'}
         </button>
       </div>
+      <div className="wave-tabs" role="group" aria-label="Support graph">
+        <button type="button" aria-pressed={p.showSupport} onClick={() => p.onShowSupport(!p.showSupport)}>
+          {p.showSupport ? 'Hide what holds it up' : 'Show what holds it up'}
+        </button>
+      </div>
       {p.showDrops && <DropNote map={p.dropMap} scoped={p.scoped} />}
+      {p.showSupport && !p.scoped && <p className="muted">Pick a detail to see what has to be standing before it.</p>}
     </>
   )
 }
@@ -157,6 +182,7 @@ type StageProps = {
   drops: PuzzleDrop[] | undefined
   label: string
   selectedBlock: PuzzleHouseBlock | null
+  showSupport: boolean
 }
 
 export function HouseStage(p: StageProps) {
@@ -171,11 +197,12 @@ export function HouseStage(p: StageProps) {
           artUrl={p.artUrl}
           mode={p.artMode}
           drops={p.drops}
+          support={p.showSupport && p.selectedBlock ? { targetBlockID: p.selectedBlock.block_id, groups: p.selectedBlock.required_groups } : null}
           title={`${p.label}, coloured by how often each detail falls`}
         />
         <p className="muted">Click any detail to inspect it. Grey means ground, or too few tries to judge.</p>
       </div>
-      {p.selectedBlock ? <BlockPanel block={p.selectedBlock} /> : <p className="muted">No detail selected.</p>}
+      {p.selectedBlock ? <BlockPanel block={p.selectedBlock} showSupport={p.showSupport} /> : <p className="muted">No detail selected.</p>}
     </div>
   )
 }
@@ -230,6 +257,8 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         onArtMode={view.setArtMode}
         showDrops={view.showDrops}
         onShowDrops={view.setShowDrops}
+        showSupport={view.showSupport}
+        onShowSupport={view.setShowSupport}
         dropMap={dropMap}
         scoped={view.selected != null}
       />
@@ -243,6 +272,7 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         drops={dropMap?.drops}
         label={label}
         selectedBlock={blocks.find((b) => b.block_id === view.selected) ?? null}
+        showSupport={view.showSupport}
       />
       <AttemptsSection project={project} city={city} house={house} from={from} to={to} blocks={blocks} label={label} />
     </>
