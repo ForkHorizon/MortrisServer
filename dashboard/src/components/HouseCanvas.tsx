@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { PuzzleDrop, PuzzleHouseBlock } from '../api/houseTypes'
 import { UNPLAYED, paintFor } from './houseColors'
+import { type HouseMetric, metricReading } from './houseMetrics'
 import { DropLayer, SupportLayer, supportColorByBlock } from './houseOverlays'
 
 // Milli-unit world space is y-up; SVG is y-down. Negating y at render time
@@ -65,25 +67,37 @@ type Props = {
   missing?: Set<number>
   /** Placement rule of the selected detail, drawn as a dependency graph. */
   support?: { targetBlockID: number; groups: number[][] } | null
+  metric?: HouseMetric
+  replayRelease?: { x: number; y: number; targetID: number } | null
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
 // union of block bounds — so it is placed at that rect with no stored
 // offset. preserveAspectRatio="none" is correct here precisely because
 // the two rects are the same rect; letterboxing would misalign it.
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing, support }: Props) {
+export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing, support, metric = 'fall', replayRelease }: Props) {
+  const [zoom, setZoom] = useState(1)
   const extent = extentOf(blocks)
   if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
   const width = extent.maxX - extent.minX
   const height = extent.maxY - extent.minY
-  const pad = width * 0.02
-  const box = `${extent.minX - pad} ${-extent.maxY - pad} ${width + pad * 2} ${height + pad * 2}`
+  const padX = width * 0.02 / zoom
+  const padY = height * 0.02 / zoom
+  const visibleWidth = width / zoom
+  const visibleHeight = height / zoom
+  const box = `${extent.minX + (width - visibleWidth) / 2 - padX} ${-extent.maxY + (height - visibleHeight) / 2 - padY} ${visibleWidth + padX * 2} ${visibleHeight + padY * 2}`
   const strokeWidth = width / 220
   const supportColors = supportColorByBlock(support)
   const showArt = artUrl && mode !== 'diagram'
   const showDiagram = mode !== 'art'
   return (
-    <svg viewBox={box} className="house-canvas" role="img" aria-label={title}>
+    <div className="house-canvas-frame">
+      <div className="canvas-zoom" role="group" aria-label="House zoom">
+        <button type="button" onClick={() => setZoom((value) => Math.min(3, value * 1.4))}>Zoom in</button>
+        <button type="button" onClick={() => setZoom((value) => Math.max(1, value / 1.4))} disabled={zoom === 1}>Zoom out</button>
+        <button type="button" onClick={() => setZoom(1)} disabled={zoom === 1}>Reset view</button>
+      </div>
+      <svg viewBox={box} className="house-canvas" role="img" aria-label={title} style={{ aspectRatio: `${width}/${height}` }}>
       {showArt && (
         <image
           href={artUrl}
@@ -105,14 +119,25 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
             strokeWidth={strokeWidth}
             interactive={interactive}
             onSelect={onSelect}
+            metric={metric}
             replay={placed ? { standing: placed.has(block.block_id), active: active === block.block_id, missing: !!missing?.has(block.block_id) } : undefined}
             supportColor={supportColors.get(block.block_id)}
           />
         ))}
       {support && <SupportLayer blocks={blocks} support={support} scale={strokeWidth} />}
+      {replayRelease && <ReplayArrow blocks={blocks} release={replayRelease} scale={strokeWidth} />}
       {drops && drops.length > 0 && <DropLayer drops={drops} scale={strokeWidth} />}
-    </svg>
+      </svg>
+    </div>
   )
+}
+
+function ReplayArrow({ blocks, release, scale }: { blocks: PuzzleHouseBlock[]; release: { x: number; y: number; targetID: number }; scale: number }) {
+  const target = blocks.find((block) => block.block_id === release.targetID)?.bounds_milli
+  if (!target || release.x < 0 || release.y < 0) return null
+  const x = (target.min_x + target.max_x) / 2
+  const y = (target.min_y + target.max_y) / 2
+  return <line x1={release.x} y1={-release.y} x2={x} y2={-y} stroke="#ffffff" strokeWidth={scale * 1.2} strokeDasharray={`${scale * 4} ${scale * 2}`} />
 }
 
 type ReplayState = { standing: boolean; active: boolean; missing: boolean }
@@ -127,6 +152,7 @@ type ShapeProps = {
   onSelect?: (blockID: number) => void
   replay?: ReplayState
   supportColor?: string
+  metric: HouseMetric
 }
 
 // In replay the colour stops meaning "how often this falls" and starts
@@ -144,7 +170,7 @@ function replayPaint(replay: ReplayState): { color: string; opacity: number; lab
   return { color: REPLAY_STANDING, opacity: 0.07, label: 'not placed yet' }
 }
 
-function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect, replay, supportColor: supportStroke }: ShapeProps) {
+function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect, replay, supportColor: supportStroke, metric }: ShapeProps) {
   const points = pathFor(block)
   if (!points) return null
   if (replay) {
@@ -162,9 +188,10 @@ function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interacti
   }
   // A ground block is placeable at any time, so a fall rate would be
   // meaningless for it — it is always neutral, never scored.
+  const reading = metricReading(block, metric)
   const paint = block.is_ground
     ? { color: UNPLAYED, label: 'ground — always placeable', reliable: false }
-    : paintFor(block.fall_rate, block.rate_is_reliable, block.placements)
+    : paintFor(reading.ratio, reading.reliable, reading.sample)
   const clickable = interactive && !dimmed
   return (
     <polygon
@@ -176,7 +203,7 @@ function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interacti
       strokeOpacity={dimmed ? 0.2 : 1}
       tabIndex={clickable ? 0 : undefined}
       role={clickable ? 'button' : undefined}
-      aria-label={interactive ? `Detail ${block.block_id}, ${paint.label}` : undefined}
+      aria-label={interactive ? `Detail ${block.block_id}, ${reading.label}; ${reading.sample} samples; ${paint.label}` : undefined}
       style={clickable ? { cursor: 'pointer' } : undefined}
       onClick={clickable ? () => onSelect?.(block.block_id) : undefined}
       onKeyDown={

@@ -39,7 +39,6 @@ const OUTCOME_WORDS: Record<string, string> = {
   fell_no_snap_target: 'dropped nowhere near a slot',
   fell_missing_support: 'tried to build in the air',
   fell_missing_rule: 'content bug — no rule exists',
-  returned: 'changed their mind',
   placed: 'placed',
 }
 

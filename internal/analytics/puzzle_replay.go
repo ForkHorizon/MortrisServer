@@ -15,14 +15,17 @@ import (
 // shows the half-built house it failed against, which is the thing that
 // makes "why would anyone try that" answerable.
 type PuzzleReplayStep struct {
-	Index     int       `json:"index"`
-	Name      string    `json:"name"`
-	At        time.Time `json:"at"`
-	BlockID   int       `json:"block_id"`
-	TargetID  int       `json:"target_id"`
-	Outcome   string    `json:"outcome"`
-	RuleState string    `json:"rule_state"`
-	WaveIndex int       `json:"wave_index"`
+	Index           int       `json:"index"`
+	Name            string    `json:"name"`
+	At              time.Time `json:"at"`
+	BlockID         int       `json:"block_id"`
+	TargetID        int       `json:"target_id"`
+	Outcome         string    `json:"outcome"`
+	RuleState       string    `json:"rule_state"`
+	WaveIndex       int       `json:"wave_index"`
+	ReleaseX        int       `json:"release_x_milli"`
+	ReleaseY        int       `json:"release_y_milli"`
+	ActiveElapsedMS int64     `json:"active_elapsed_ms"`
 	// Placed is the house state after this step, so a scrubber can render
 	// any step without replaying the ones before it.
 	Placed []int `json:"placed"`
@@ -35,6 +38,7 @@ type PuzzleReplay struct {
 	AttemptID string             `json:"attempt_id"`
 	CityID    int                `json:"city_id"`
 	HouseID   int                `json:"house_id"`
+	InstallID string             `json:"install_id"`
 	Steps     []PuzzleReplayStep `json:"steps"`
 	Truncated bool               `json:"truncated"`
 }
@@ -82,7 +86,7 @@ func loadReplayCatalog(ctx context.Context, pool *pgxpool.Pool, projectID, revis
 }
 
 func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) *PuzzleReplay {
-	replay := &PuzzleReplay{AttemptID: attemptID, Steps: []PuzzleReplayStep{}, Truncated: raw.Truncated, CityID: -1, HouseID: -1}
+	replay := &PuzzleReplay{AttemptID: attemptID, InstallID: raw.InstallID, Steps: []PuzzleReplayStep{}, Truncated: raw.Truncated, CityID: -1, HouseID: -1}
 	installed := map[int]bool{}
 	for i := range raw.Events {
 		payload, ok := attemptEventPayload(raw.Events[i].Properties)
@@ -95,6 +99,7 @@ func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) 
 		step := PuzzleReplayStep{
 			Index: len(replay.Steps), Name: raw.Events[i].Name, At: raw.Events[i].EffectiveAt,
 			BlockID: -1, TargetID: -1, WaveIndex: number(payload["wave_index"]),
+			ReleaseX: number(payload["release_x_milli"]), ReleaseY: number(payload["release_y_milli"]), ActiveElapsedMS: number64(payload["active_elapsed_ms"]),
 		}
 		if raw.Events[i].Name == "placement_resolved" {
 			installed = applyReplayPlacement(&step, catalog, installed, payload)
@@ -142,26 +147,37 @@ func sortedBlockIDs(set map[int]bool) []int {
 
 // PuzzleAttemptSummary is one row of the attempt picker.
 type PuzzleAttemptSummary struct {
-	AttemptID  string    `json:"attempt_id"`
-	StartedAt  time.Time `json:"started_at"`
-	WaveIndex  int       `json:"wave_index"`
-	Placements int64     `json:"placements"`
-	Falls      int64     `json:"falls"`
-	Hints      int64     `json:"hints"`
-	Completed  bool      `json:"completed"`
+	AttemptID        string    `json:"attempt_id"`
+	InstallID        string    `json:"install_id"`
+	StartedAt        time.Time `json:"started_at"`
+	WaveIndex        int       `json:"wave_index"`
+	Placements       int64     `json:"placements"`
+	Falls            int64     `json:"falls"`
+	Hints            int64     `json:"hints"`
+	Completed        bool      `json:"completed"`
+	AppVersion       string    `json:"app_version"`
+	BuildNumber      string    `json:"build_number"`
+	ActiveDurationMS int64     `json:"active_duration_ms"`
+	LastWaveIndex    int       `json:"last_wave_index"`
+	DominantFailure  string    `json:"dominant_failure"`
 }
 
 func GetPuzzleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) ([]PuzzleAttemptSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	rows, err := pool.Query(ctx, `
-SELECT properties->>'attempt_id',
+SELECT properties->>'attempt_id', MIN(install_id::text),
        MIN(effective_at),
        MIN((properties->>'wave_index')::int),
        COUNT(*) FILTER (WHERE name='placement_resolved'),
        COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),
        COUNT(*) FILTER (WHERE name='hint_used'),
-       BOOL_OR(name IN ('wave_completed','house_completed'))
+       BOOL_OR(name IN ('wave_completed','house_completed')),
+       (array_agg(app_version ORDER BY effective_at DESC))[1],
+       (array_agg(build_number ORDER BY effective_at DESC))[1],
+       MAX(COALESCE((properties->>'active_elapsed_ms')::bigint,0)) - MIN(COALESCE((properties->>'active_elapsed_ms')::bigint,0)),
+       MAX(COALESCE((properties->>'wave_index')::int,0)),
+       COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),'')
 FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
   AND properties ? 'attempt_id'
@@ -176,8 +192,9 @@ LIMIT 200`, projectID, cityID, houseID, from, to)
 	result := []PuzzleAttemptSummary{}
 	for rows.Next() {
 		var row PuzzleAttemptSummary
-		if err := rows.Scan(&row.AttemptID, &row.StartedAt, &row.WaveIndex,
-			&row.Placements, &row.Falls, &row.Hints, &row.Completed); err != nil {
+		if err := rows.Scan(&row.AttemptID, &row.InstallID, &row.StartedAt, &row.WaveIndex,
+			&row.Placements, &row.Falls, &row.Hints, &row.Completed, &row.AppVersion, &row.BuildNumber,
+			&row.ActiveDurationMS, &row.LastWaveIndex, &row.DominantFailure); err != nil {
 			return nil, err
 		}
 		result = append(result, row)

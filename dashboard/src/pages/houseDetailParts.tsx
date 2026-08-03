@@ -1,16 +1,19 @@
+import { useEffect } from 'react'
 import type { ArtMode } from '../components/HouseCanvas'
 import type { PuzzleDrop, PuzzleDropMap, PuzzleHouseBlock, PuzzleHouseDetail } from '../api/houseTypes'
 import type { HouseControls } from './useHouseControls'
 import { AttemptPicker } from '../components/AttemptPicker'
 import { HouseCanvas } from '../components/HouseCanvas'
 import { outcomeWords, paintFor, percent, ruleSentence, supportColor, supportGroupLabel } from '../components/houseColors'
+import { HOUSE_METRICS, type HouseMetric, metricReading, metricTitle } from '../components/houseMetrics'
 import { StatGrid, StatTile } from '../components/StatTile'
 
 // The pieces of the house detail view. Split out of HouseDetailPage.tsx
 // so the page itself stays a thin shell over the data hook.
 
-export function BlockPanel({ block, showSupport = false }: { block: PuzzleHouseBlock; showSupport?: boolean }) {
-  const paint = paintFor(block.fall_rate, block.rate_is_reliable, block.placements)
+export function BlockPanel({ block, metric, showSupport = false }: { block: PuzzleHouseBlock; metric: HouseMetric; showSupport?: boolean }) {
+  const reading = metricReading(block, metric)
+  const paint = paintFor(reading.ratio, reading.reliable, reading.sample)
   const reasons = Object.entries(block.falls_by_reason).sort((a, b) => b[1] - a[1])
   return (
     <div className="block-panel">
@@ -20,15 +23,15 @@ export function BlockPanel({ block, showSupport = false }: { block: PuzzleHouseB
         {block.is_ground ? ' · sits on the ground' : ''} · {block.visual_key}
       </p>
       <p className="verdict">
-        {block.placements === 0
+        {reading.sample === 0
           ? 'Nobody has tried to place this detail in this range.'
-          : block.rate_is_reliable
-            ? `${percent(block.fall_rate)} of drops on this detail end in a fall (${block.falls} of ${block.placements}).`
-            : `Only ${block.placements} ${block.placements === 1 ? 'try' : 'tries'} so far — too few to judge. ${block.falls} fell.`}
+          : reading.reliable
+            ? `${metricTitle(metric)}: ${reading.label} (${reading.sample} samples).`
+            : `Only ${reading.sample} samples so far — too few to judge ${metricTitle(metric).toLowerCase()}.`}
       </p>
       <StatGrid>
         <StatTile label="Drops" value={block.placements} />
-        <StatTile label="Falls" value={block.falls} />
+        <StatTile label={metricTitle(metric)} value={reading.label} />
         <StatTile label="Verdict" value={paint.label} />
       </StatGrid>
       {reasons.length > 0 && (
@@ -99,6 +102,17 @@ export function ArtModeTabs({ mode, onChange }: { mode: ArtMode; onChange: (m: A
   )
 }
 
+function MetricTabs({ metric, onChange }: { metric: HouseMetric; onChange: (m: HouseMetric) => void }) {
+  return (
+    <div className="control-row" role="group" aria-label="What to measure">
+      <strong>Measure</strong>
+      {HOUSE_METRICS.map((item) => (
+        <button key={item.id} type="button" aria-pressed={metric === item.id} onClick={() => onChange(item.id)}>{item.label}</button>
+      ))}
+    </div>
+  )
+}
+
 // Grey has to be explained, not just shown: with a thin sample most of a
 // house is grey, and a reader who assumes grey means "fine" draws exactly
 // the wrong conclusion.
@@ -121,7 +135,9 @@ export function DropNote({ map, scoped }: { map: PuzzleDropMap | null | undefine
   if (!map.aligned) {
     return (
       <p className="muted">
-        {map.alignment_issue === 'inconsistent'
+        {map.alignment_issue === 'mixed_coordinate_spaces'
+          ? 'This range mixes old world-space drops with corrected house-space drops. Start the range after the corrected build before reading this map.'
+          : map.alignment_issue === 'inconsistent'
           ? "Can't place these drops on the house — the recorded positions disagree with each other, so no single alignment fits them. Nothing is shown rather than showing it in the wrong place."
           : 'Not enough successful placements in this range to work out where these drops belong on the house. Widen the date range, or wait for more play.'}
       </p>
@@ -149,25 +165,31 @@ type ToolbarProps = {
   onShowSupport: (v: boolean) => void
   dropMap: PuzzleDropMap | null | undefined
   scoped: boolean
+  metric: HouseMetric
+  onMetric: (metric: HouseMetric) => void
 }
 
 export function HouseToolbar(p: ToolbarProps) {
   return (
     <>
-      <WaveTabs count={p.waveCount} wave={p.wave} onChange={p.onWave} />
-      <ArtModeTabs mode={p.artMode} onChange={p.onArtMode} />
-      <div className="wave-tabs" role="group" aria-label="Drop map">
+      <div className="house-toolbar">
+      <div className="control-row"><strong>Wave</strong><WaveTabs count={p.waveCount} wave={p.wave} onChange={p.onWave} /></div>
+      <MetricTabs metric={p.metric} onChange={p.onMetric} />
+      <div className="control-row"><strong>Visual layer</strong><ArtModeTabs mode={p.artMode} onChange={p.onArtMode} /></div>
+      <div className="control-row" role="group" aria-label="Drop map">
+        <strong>Overlay</strong>
         <button type="button" aria-pressed={p.showDrops} onClick={() => p.onShowDrops(!p.showDrops)}>
           {p.showDrops ? 'Hide where players let go' : 'Show where players let go'}
         </button>
       </div>
-      <div className="wave-tabs" role="group" aria-label="Support graph">
+      <div className="control-row" role="group" aria-label="Support graph">
         <button type="button" aria-pressed={p.showSupport} onClick={() => p.onShowSupport(!p.showSupport)}>
           {p.showSupport ? 'Hide what holds it up' : 'Show what holds it up'}
         </button>
       </div>
       {p.showDrops && <DropNote map={p.dropMap} scoped={p.scoped} />}
       {p.showSupport && !p.scoped && <p className="muted">Pick a detail to see what has to be standing before it.</p>}
+      </div>
     </>
   )
 }
@@ -183,6 +205,7 @@ type StageProps = {
   label: string
   selectedBlock: PuzzleHouseBlock | null
   showSupport: boolean
+  metric: HouseMetric
 }
 
 export function HouseStage(p: StageProps) {
@@ -198,11 +221,12 @@ export function HouseStage(p: StageProps) {
           mode={p.artMode}
           drops={p.drops}
           support={p.showSupport && p.selectedBlock ? { targetBlockID: p.selectedBlock.block_id, groups: p.selectedBlock.required_groups } : null}
-          title={`${p.label}, coloured by how often each detail falls`}
+          metric={p.metric}
+          title={`${p.label}, coloured by ${metricTitle(p.metric).toLowerCase()}`}
         />
         <p className="muted">Click any detail to inspect it. Grey means ground, or too few tries to judge.</p>
       </div>
-      {p.selectedBlock ? <BlockPanel block={p.selectedBlock} showSupport={p.showSupport} /> : <p className="muted">No detail selected.</p>}
+      {p.selectedBlock ? <BlockPanel block={p.selectedBlock} metric={p.metric} showSupport={p.showSupport} /> : <p className="muted">Select a detail to see what happened and what to inspect next.</p>}
     </div>
   )
 }
@@ -246,9 +270,12 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
   const blocks = detail.blocks
   const label = detail.display_label || `House ${house}`
   const worst = [...blocks].filter((b) => b.rate_is_reliable && !b.is_ground).sort((a, b) => b.fall_rate - a.fall_rate)[0]
+  const defaultBlock = worst ?? [...blocks].filter((b) => !b.is_ground).sort((a, b) => b.placements - a.placements)[0]
+  useEffect(() => { if (view.selected == null && defaultBlock) view.setSelected(defaultBlock.block_id) }, [defaultBlock, view])
   return (
     <>
       <p className="verdict">{houseVerdict(worst)}</p>
+      {detail.data_quality.coordinate_status !== 'trusted' && <p className="data-quality">Spatial overlay is limited to corrected data. {detail.data_quality.coordinate_status === 'mixed_coordinate_spaces' ? 'This date range mixes old world-space and corrected house-space drops; start after the corrected build.' : 'These drops predate the corrected content revision and are marked legacy.'}</p>}
       <HouseToolbar
         waveCount={detail.wave_count}
         wave={view.wave}
@@ -261,6 +288,8 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         onShowSupport={view.setShowSupport}
         dropMap={dropMap}
         scoped={view.selected != null}
+        metric={view.metric}
+        onMetric={view.setMetric}
       />
       <HouseStage
         blocks={blocks}
@@ -273,6 +302,7 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         label={label}
         selectedBlock={blocks.find((b) => b.block_id === view.selected) ?? null}
         showSupport={view.showSupport}
+        metric={view.metric}
       />
       <AttemptsSection project={project} city={city} house={house} from={from} to={to} blocks={blocks} label={label} />
     </>

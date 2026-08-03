@@ -3,7 +3,7 @@ package analytics
 import "testing"
 
 func placedDrop(release, target int) PuzzleDrop {
-	return PuzzleDrop{Outcome: "placed", TargetID: 1, ReleaseX: release, ReleaseY: release, TargetX: target, TargetY: target}
+	return PuzzleDrop{Outcome: "placed", TargetID: 1, ReleaseX: release, ReleaseY: release, TargetX: target, TargetY: target, Legacy: true}
 }
 
 // The client sends world coordinates while the layout is house-local, so
@@ -67,10 +67,18 @@ func TestAlignDropsShiftsFallsUsingPlacedAnchor(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		result.Drops = append(result.Drops, placedDrop(2000+offset, 2000))
 	}
-	result.Drops = append(result.Drops, PuzzleDrop{Outcome: "fell_missing_support", TargetID: 2, ReleaseX: 9000 + offset, ReleaseY: 9000 + offset, TargetX: 9000, TargetY: 9000})
+	result.Drops = append(result.Drops, PuzzleDrop{Outcome: "fell_missing_support", TargetID: 2, ReleaseX: 9000 + offset, ReleaseY: 9000 + offset, TargetX: 9000, TargetY: 9000, Legacy: true})
 	alignDrops(result)
 	fall := result.Drops[len(result.Drops)-1]
 	if fall.ReleaseX != 9000 {
 		t.Fatalf("fall release = %d, want 9000 after the placed-anchored shift", fall.ReleaseX)
+	}
+}
+
+func TestAlignDropsKeepsCorrectedHouseLocalCoordinates(t *testing.T) {
+	result := &PuzzleDropMap{Drops: []PuzzleDrop{{Outcome: "placed", TargetID: 1, ReleaseX: 1234, ReleaseY: 5678, TargetX: 1200, TargetY: 5600}}}
+	alignDrops(result)
+	if !result.Aligned || result.OffsetX != 0 || result.Drops[0].ReleaseX != 1234 {
+		t.Fatalf("corrected coordinates were unexpectedly fitted: %+v", result)
 	}
 }

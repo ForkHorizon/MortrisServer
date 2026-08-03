@@ -23,6 +23,7 @@ type PuzzleDrop struct {
 	TargetX   int    `json:"target_x_milli"`
 	TargetY   int    `json:"target_y_milli"`
 	AttemptID string `json:"attempt_id"`
+	Legacy    bool   `json:"legacy_coordinates"`
 }
 
 type PuzzleDropMap struct {
@@ -45,7 +46,8 @@ type PuzzleDropMap struct {
 	// Spread is the median absolute deviation of the offset estimate, in
 	// milli-units. Surfaced so the caller can show how tight the fit was
 	// rather than presenting a fitted map as ground truth.
-	Spread int `json:"offset_spread_milli"`
+	Spread             int  `json:"offset_spread_milli"`
+	TrustedCoordinates bool `json:"trusted_coordinates"`
 }
 
 // snapDistanceMilli is CheckTruePositionService's maxSnapDistance (1.5
@@ -61,15 +63,11 @@ const minPlacedForAlignment = 5
 // GetPuzzleDrops returns release points for one house, optionally one
 // block, joined to target positions.
 //
-// The join deliberately ignores content_revision and uses the layout
-// revision instead. Events in this project carry per-house revisions
-// produced by the client's local JSON-hash fallback, none of which were
-// ever imported, so a revision-exact join returns nothing at all. Block
-// and target IDs are array indices and have been stable across those
-// builds — verified against live data — so matching on (city, house,
-// target) is correct in practice. It stops being correct the moment a
-// house is re-authored with different indices, which is exactly what the
-// content_revision contract exists to prevent; see the plan doc.
+// Events with an imported revision join that exact layout. Events from
+// before the corrected client build have an unimported local hash, so they
+// are labelled legacy and use the latest layout only as a best-effort
+// fallback. A mixed range is deliberately withheld rather than plotting
+// two coordinate spaces as though they agree.
 func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, blockID *int, from, to time.Time) (*PuzzleDropMap, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -87,7 +85,7 @@ func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, c
 		var drop PuzzleDrop
 		var targetX, targetY *int
 		if err := rows.Scan(&drop.BlockID, &drop.TargetID, &drop.Outcome,
-			&drop.ReleaseX, &drop.ReleaseY, &targetX, &targetY, &drop.AttemptID); err != nil {
+			&drop.ReleaseX, &drop.ReleaseY, &targetX, &targetY, &drop.AttemptID, &drop.Legacy); err != nil {
 			return nil, err
 		}
 		if targetX == nil || targetY == nil {
@@ -100,29 +98,32 @@ func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, c
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	result.TrustedCoordinates = allDropRevisionsKnown(result.Drops)
 	alignDrops(result)
 	return result, nil
 }
 
-// alignDrops converts release points from world space into the house
-// space the layout is drawn in.
-//
-// The client sends `blockTransform.position`, which is a world
-// coordinate, while blocks and targets are house-local. Each house sits
-// at its own world offset, so the two frames differ by a constant per
-// house — house 0/1 happens to sit near the origin, which is why the
-// mismatch is invisible if you only look at that one.
-//
-// The offset is recovered from the data rather than stored: a placed
-// drop is by definition within snapDistanceMilli of its target, so the
-// median of (release - target) over placed drops is the offset, and the
-// median shrugs off the occasional wild release that a mean would not.
-//
-// If the estimate is not tight enough to trust, the drops are dropped
-// rather than drawn somewhere plausible-looking but wrong. The real fix
-// is one line in the client — send the release position relative to the
-// house root — after which this becomes a no-op for new data.
+// alignDrops converts legacy release points from world space into the house
+// space the layout is drawn in. Corrected coordinates need no fitting.
 func alignDrops(result *PuzzleDropMap) {
+	result.TrustedCoordinates = allDropRevisionsKnown(result.Drops)
+	if result.TrustedCoordinates {
+		result.Aligned = true
+		return
+	}
+	legacy, corrected := 0, 0
+	for _, drop := range result.Drops {
+		if drop.Legacy {
+			legacy++
+		} else {
+			corrected++
+		}
+	}
+	if legacy > 0 && corrected > 0 {
+		result.AlignmentIssue = "mixed_coordinate_spaces"
+		result.Drops = []PuzzleDrop{}
+		return
+	}
 	dx, dy := make([]int, 0, len(result.Drops)), make([]int, 0, len(result.Drops))
 	for _, drop := range result.Drops {
 		if drop.Outcome == "placed" && drop.TargetID >= 0 {
@@ -151,6 +152,10 @@ func alignDrops(result *PuzzleDropMap) {
 		result.Drops[i].ReleaseX -= offsetX
 		result.Drops[i].ReleaseY -= offsetY
 	}
+}
+
+func allDropRevisionsKnown(drops []PuzzleDrop) bool {
+	return len(drops) > 0 && !slices.ContainsFunc(drops, func(drop PuzzleDrop) bool { return drop.Legacy })
 }
 
 func intMedian(values []int) int {
@@ -192,7 +197,8 @@ WITH d AS (
            COALESCE(properties->>'outcome','') outcome,
            (properties->>'release_x_milli')::int release_x,
            (properties->>'release_y_milli')::int release_y,
-           COALESCE(properties->>'attempt_id','') attempt_id
+           COALESCE(properties->>'attempt_id','') attempt_id,
+           NULLIF(properties->>'content_revision','') content_revision
     FROM events
     WHERE project_id=$1 AND name='placement_resolved'
       AND effective_at>=$5 AND effective_at<$6
@@ -201,10 +207,12 @@ WITH d AS (
       AND ($7::int IS NULL OR (properties->>'block_id')::int=$7)
 )
 SELECT d.block_id, COALESCE(d.target_id,-1), d.outcome, d.release_x, d.release_y,
-       t.local_x_milli, t.local_y_milli, d.attempt_id
+       t.local_x_milli, t.local_y_milli, d.attempt_id, r.content_revision IS NULL
 FROM d
+LEFT JOIN puzzle_content_revisions r
+       ON r.project_id=$1 AND r.content_revision=d.content_revision
 LEFT JOIN puzzle_content_targets t
-       ON t.project_id=$1 AND t.content_revision=$2
+       ON t.project_id=$1 AND t.content_revision=COALESCE(r.content_revision,$2)
       AND t.city_id=$3 AND t.house_id=$4 AND t.target_id=d.target_id
 ORDER BY d.block_id
 LIMIT 2000`

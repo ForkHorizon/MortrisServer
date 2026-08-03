@@ -32,16 +32,30 @@ type PuzzleHouseBlock struct {
 	// them to plain language.
 	FallsByReason map[string]int64 `json:"falls_by_reason"`
 	// RateIsReliable is false below minPlacementsForRate — see its comment.
-	RateIsReliable bool `json:"rate_is_reliable"`
+	RateIsReliable       bool    `json:"rate_is_reliable"`
+	FirstTryFailures     int64   `json:"first_try_failures"`
+	FirstTryAttempts     int64   `json:"first_try_attempts"`
+	FirstTryFailureRate  float64 `json:"first_try_failure_rate"`
+	FirstTryReliable     bool    `json:"first_try_reliable"`
+	NoSnapRate           float64 `json:"no_snap_rate"`
+	MissingSupportRate   float64 `json:"missing_support_rate"`
+	HintPressureCount    int64   `json:"hint_pressure_count"`
+	HintPressureRate     float64 `json:"hint_pressure_rate"`
+	MedianTriesToSuccess int     `json:"median_tries_to_success"`
+	SuccessfulPlacements int64   `json:"successful_placements"`
+	MedianTimeToPlaceMS  int64   `json:"median_time_to_place_ms"`
+	TimeToPlaceSamples   int64   `json:"time_to_place_samples"`
 }
 
 type PuzzleHouseDetail struct {
-	CityID          int                `json:"city_id"`
-	HouseID         int                `json:"house_id"`
-	DisplayLabel    string             `json:"display_label"`
-	ContentRevision string             `json:"content_revision"`
-	WaveCount       int                `json:"wave_count"`
-	Blocks          []PuzzleHouseBlock `json:"blocks"`
+	CityID          int                 `json:"city_id"`
+	HouseID         int                 `json:"house_id"`
+	DisplayLabel    string              `json:"display_label"`
+	ContentRevision string              `json:"content_revision"`
+	WaveCount       int                 `json:"wave_count"`
+	Blocks          []PuzzleHouseBlock  `json:"blocks"`
+	Waves           []PuzzleWaveSummary `json:"waves"`
+	DataQuality     PuzzleDataQuality   `json:"data_quality"`
 }
 
 func GetPuzzleHouse(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) (*PuzzleHouseDetail, error) {
@@ -51,11 +65,14 @@ func GetPuzzleHouse(ctx context.Context, pool *pgxpool.Pool, projectID string, c
 	if err != nil {
 		return nil, err
 	}
-	detail := &PuzzleHouseDetail{CityID: cityID, HouseID: houseID, ContentRevision: revision, Blocks: []PuzzleHouseBlock{}}
+	detail := &PuzzleHouseDetail{CityID: cityID, HouseID: houseID, ContentRevision: revision, Blocks: []PuzzleHouseBlock{}, Waves: []PuzzleWaveSummary{}}
 	if err := loadPuzzleHouseBlocks(ctx, pool, detail, projectID, revision); err != nil {
 		return nil, err
 	}
 	if err := loadPuzzleHouseMetrics(ctx, pool, detail, projectID, from, to); err != nil {
+		return nil, err
+	}
+	if err := loadPuzzleHouseInsights(ctx, pool, detail, projectID, from, to); err != nil {
 		return nil, err
 	}
 	// The jsonpath is built here rather than concatenated in SQL: the

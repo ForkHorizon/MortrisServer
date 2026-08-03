@@ -22,6 +22,7 @@ type GameplayAttemptEvent struct {
 
 type GameplayAttempt struct {
 	AttemptID       string                 `json:"attempt_id"`
+	InstallID       string                 `json:"install_id"`
 	ContentRevision string                 `json:"content_revision"`
 	Events          []GameplayAttemptEvent `json:"events"`
 	Truncated       bool                   `json:"truncated"`
@@ -47,17 +48,21 @@ func GetGameplayAttempt(ctx context.Context, pool *pgxpool.Pool, projectID, atte
 
 func loadGameplayAttemptEvents(ctx context.Context, pool *pgxpool.Pool, projectID, attemptID string) (*GameplayAttempt, error) {
 	result := &GameplayAttempt{AttemptID: attemptID, Events: []GameplayAttemptEvent{}}
-	rows, err := pool.Query(ctx, `SELECT event_id,name,effective_at,properties FROM events WHERE project_id=$1 AND properties->>'attempt_id'=$2 ORDER BY effective_at LIMIT 501`, projectID, attemptID)
+	rows, err := pool.Query(ctx, `SELECT event_id,name,effective_at,properties,install_id::text FROM events WHERE project_id=$1 AND properties->>'attempt_id'=$2 ORDER BY effective_at LIMIT 501`, projectID, attemptID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var event GameplayAttemptEvent
-		if err := rows.Scan(&event.EventID, &event.Name, &event.EffectiveAt, &event.Properties); err != nil {
+		var installID string
+		if err := rows.Scan(&event.EventID, &event.Name, &event.EffectiveAt, &event.Properties, &installID); err != nil {
 			return nil, err
 		}
 		setAttemptContentRevision(result, event.Properties)
+		if result.InstallID == "" {
+			result.InstallID = installID
+		}
 		result.Events = append(result.Events, event)
 	}
 	if err := rows.Err(); err != nil {

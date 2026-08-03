@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { PuzzleAttemptList, PuzzleHouseBlock, PuzzleReplay } from '../api/houseTypes'
+import type { PuzzleAttemptList, PuzzleAttemptSummary, PuzzleHouseBlock, PuzzleReplay } from '../api/houseTypes'
 import { useApiData } from '../hooks/useApiData'
 import { ReplayPlayer } from './ReplayPlayer'
 import { Timestamp } from './Timestamp'
+import { outcomeWords } from './houseColors'
 
 type Props = { project: string; city: string; house: string; from: string; to: string; blocks: PuzzleHouseBlock[]; label: string }
 
@@ -22,26 +24,21 @@ export function AttemptPicker({ project, city, house, from, to, blocks, label }:
   )
   const replay = useApiData<PuzzleReplay | null>(fetchReplay, `puzzle-replay:${project}:${selected}`)
 
-  const rows = [...(attempts.data?.attempts ?? [])].sort((a, b) => b.falls - a.falls)
+  const rows = [...(attempts.data?.attempts ?? [])].sort((a, b) => b.falls - a.falls || b.active_duration_ms - a.active_duration_ms)
   if (rows.length === 0) return <p className="muted">No attempts on this house in this range.</p>
   return (
     <>
-      <ul className="attempt-list">
-        {rows.map((a) => (
-          <li key={a.attempt_id}>
-            <button type="button" aria-pressed={selected === a.attempt_id} onClick={() => setSelected(a.attempt_id)}>
-              <Timestamp value={a.started_at} mode="absolute" />
-              {' · '}wave {a.wave_index + 1}
-              {' · '}{a.placements} {a.placements === 1 ? 'drop' : 'drops'}
-              {a.falls > 0 && `, ${a.falls} fell`}
-              {a.hints > 0 && `, ${a.hints} hint${a.hints === 1 ? '' : 's'}`}
-              {a.completed ? ' · finished' : ' · not finished'}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <AttemptGroup title="Representative failure" attempts={rows.filter((row) => row.falls > 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
+      <AttemptGroup title="Longest or hardest attempt" attempts={rows.filter((row) => row.falls === 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
+      <AttemptGroup title="Completed attempt" attempts={rows.filter((row) => row.completed).slice(0, 1)} selected={selected} onSelect={setSelected} />
+      <details><summary>All {rows.length} attempts</summary><AttemptGroup attempts={rows} selected={selected} onSelect={setSelected} /></details>
       {selected && replay.data && <ReplayPlayer replay={replay.data} blocks={blocks} label={label} />}
       {selected && replay.loading && <p className="muted">Loading replay…</p>}
     </>
   )
+}
+
+function AttemptGroup({ title, attempts, selected, onSelect }: { title?: string; attempts: PuzzleAttemptSummary[]; selected: string; onSelect: (id: string) => void }) {
+  if (attempts.length === 0) return null
+  return <section className="attempt-group">{title && <h3>{title}</h3>}<ul className="attempt-list">{attempts.map((attempt) => <li key={attempt.attempt_id}><button type="button" aria-pressed={selected === attempt.attempt_id} onClick={() => onSelect(attempt.attempt_id)}><Timestamp value={attempt.started_at} mode="absolute" /> · wave {attempt.last_wave_index + 1} · {attempt.placements} drops{attempt.falls > 0 && `, ${attempt.falls} fell`} {attempt.dominant_failure && `(${outcomeWords(attempt.dominant_failure)})`} · {Math.round(attempt.active_duration_ms / 1000)}s active · {attempt.completed ? 'finished' : 'not finished'}</button>{attempt.install_id && <Link to={`/installations/${attempt.install_id}`} className="muted">Open anonymous device timeline</Link>}</li>)}</ul></section>
 }

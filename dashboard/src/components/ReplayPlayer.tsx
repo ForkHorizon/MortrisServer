@@ -105,8 +105,10 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
         placed={new Set(step.placed)}
         active={step.name === 'placement_resolved' ? step.block_id : null}
         missing={new Set(missingBlocks(step))}
+        replayRelease={step.name === 'placement_resolved' ? { x: step.release_x_milli, y: step.release_y_milli, targetID: step.target_id } : null}
       />
       <p className="verdict">{stepSentence(step)}</p>
+      {step.active_elapsed_ms >= 0 && <p className="muted">{Math.round(step.active_elapsed_ms / 1000)}s of active play into this attempt.</p>}
       <ReplayControls
         index={index}
         last={last}

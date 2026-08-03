@@ -15,7 +15,6 @@ const DROP_COLOR: Record<string, string> = {
   fell_no_snap_target: '#e8a33d',
   fell_missing_support: '#d94f4f',
   fell_missing_rule: '#b06fd0',
-  returned: '#7a8faf',
 }
 
 type DropLayerProps = { drops: PuzzleDrop[]; scale: number }
