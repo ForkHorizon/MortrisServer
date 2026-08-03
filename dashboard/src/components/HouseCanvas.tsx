@@ -29,6 +29,20 @@ function extentOf(blocks: PuzzleHouseBlock[]): Extent | null {
   }
 }
 
+function canvasViewport(extent: Extent, zoom: number) {
+  const width = extent.maxX - extent.minX
+  const height = extent.maxY - extent.minY
+  const padX = width * 0.02 / zoom
+  const padY = height * 0.02 / zoom
+  const visibleWidth = width / zoom
+  const visibleHeight = height / zoom
+  return {
+    width,
+    height,
+    box: `${extent.minX + (width - visibleWidth) / 2 - padX} ${-extent.maxY + (height - visibleHeight) / 2 - padY} ${visibleWidth + padX * 2} ${visibleHeight + padY * 2}`,
+  }
+}
+
 export type ArtMode = 'both' | 'art' | 'diagram'
 
 // Over the art, only blocks with a trustworthy rate get filled. A flat
@@ -79,13 +93,7 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
   const [zoom, setZoom] = useState(1)
   const extent = extentOf(blocks)
   if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
-  const width = extent.maxX - extent.minX
-  const height = extent.maxY - extent.minY
-  const padX = width * 0.02 / zoom
-  const padY = height * 0.02 / zoom
-  const visibleWidth = width / zoom
-  const visibleHeight = height / zoom
-  const box = `${extent.minX + (width - visibleWidth) / 2 - padX} ${-extent.maxY + (height - visibleHeight) / 2 - padY} ${visibleWidth + padX * 2} ${visibleHeight + padY * 2}`
+  const { width, height, box } = canvasViewport(extent, zoom)
   const strokeWidth = width / 220
   const supportColors = supportColorByBlock(support)
   const showArt = artUrl && mode !== 'diagram'

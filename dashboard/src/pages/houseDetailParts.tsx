@@ -4,9 +4,10 @@ import type { PuzzleDrop, PuzzleDropMap, PuzzleHouseBlock, PuzzleHouseDetail } f
 import type { HouseControls } from './useHouseControls'
 import { AttemptPicker } from '../components/AttemptPicker'
 import { HouseCanvas } from '../components/HouseCanvas'
-import { outcomeWords, paintFor, percent, ruleSentence, supportColor, supportGroupLabel } from '../components/houseColors'
+import { outcomeWords, paintFor, ruleSentence, supportColor, supportGroupLabel } from '../components/houseColors'
 import { HOUSE_METRICS, type HouseMetric, metricReading, metricTitle } from '../components/houseMetrics'
 import { StatGrid, StatTile } from '../components/StatTile'
+import { DropNote, houseVerdict } from './houseDetailText'
 
 // The pieces of the house detail view. Split out of HouseDetailPage.tsx
 // so the page itself stays a thin shell over the data hook.
@@ -110,46 +111,6 @@ function MetricTabs({ metric, onChange }: { metric: HouseMetric; onChange: (m: H
         <button key={item.id} type="button" aria-pressed={metric === item.id} onClick={() => onChange(item.id)}>{item.label}</button>
       ))}
     </div>
-  )
-}
-
-// Grey has to be explained, not just shown: with a thin sample most of a
-// house is grey, and a reader who assumes grey means "fine" draws exactly
-// the wrong conclusion.
-export function houseVerdict(worst: PuzzleHouseBlock | undefined): string {
-  return worst
-    ? `Detail ${worst.block_id} is the hardest part of this house — ${percent(worst.fall_rate)} of drops on it end in a fall.`
-    : 'No detail here has enough plays yet to judge. Grey means too few tries, not a good result.'
-}
-
-// The note carries the sample size and the legend, because a scatter of
-// eight dots looks the same as a scatter of eight hundred until someone
-// says which it is.
-export function DropNote({ map, scoped }: { map: PuzzleDropMap | null | undefined; scoped: boolean }) {
-  if (!map) return <p className="muted">Loading drops…</p>
-  const scope = scoped ? 'this detail' : 'every detail in this house'
-  // The client sends release points in world coordinates, so they have to
-  // be shifted onto the house before they mean anything. When that shift
-  // cannot be pinned down, say so rather than plotting a map that looks
-  // authoritative and points at the wrong details.
-  if (!map.aligned) {
-    return (
-      <p className="muted">
-        {map.alignment_issue === 'mixed_coordinate_spaces'
-          ? 'This range mixes old world-space drops with corrected house-space drops. Start the range after the corrected build before reading this map.'
-          : map.alignment_issue === 'inconsistent'
-          ? "Can't place these drops on the house — the recorded positions disagree with each other, so no single alignment fits them. Nothing is shown rather than showing it in the wrong place."
-          : 'Not enough successful placements in this range to work out where these drops belong on the house. Widen the date range, or wait for more play.'}
-      </p>
-    )
-  }
-  if (map.drops.length === 0) return <p className="muted">No recorded drops for {scope} in this range.</p>
-  return (
-    <p className="muted">
-      {map.drops.length} {map.drops.length === 1 ? 'drop' : 'drops'} on {scope}. Each dot is where a player let go; the
-      line runs to the slot they were aiming at.
-      {map.unresolved_drops > 0 && ` ${map.unresolved_drops} could not be matched to a slot and are not shown.`}
-    </p>
   )
 }
 
