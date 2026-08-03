@@ -46,6 +46,8 @@ func main() {
 		err = runCreateAdmin(ctx, cfg, os.Args[2:])
 	case "import-puzzle-geometry":
 		err = runImportPuzzleGeometry(ctx, cfg, os.Args[2:])
+	case "import-puzzle-art":
+		err = runImportPuzzleArt(ctx, cfg, os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", os.Args[1])
 		os.Exit(2)

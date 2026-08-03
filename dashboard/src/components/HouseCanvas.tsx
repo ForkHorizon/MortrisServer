@@ -13,15 +13,32 @@ function pathFor(block: PuzzleHouseBlock): string | null {
   return `${b.min_x},${-b.min_y} ${b.max_x},${-b.min_y} ${b.max_x},${-b.max_y} ${b.min_x},${-b.max_y}`
 }
 
-function viewBox(blocks: PuzzleHouseBlock[]): string | null {
+type Extent = { minX: number; minY: number; maxX: number; maxY: number }
+
+function extentOf(blocks: PuzzleHouseBlock[]): Extent | null {
   const bounds = blocks.map((b) => b.bounds_milli).filter((b): b is NonNullable<typeof b> => !!b)
   if (bounds.length === 0) return null
-  const minX = Math.min(...bounds.map((b) => b.min_x))
-  const maxX = Math.max(...bounds.map((b) => b.max_x))
-  const minY = Math.min(...bounds.map((b) => b.min_y))
-  const maxY = Math.max(...bounds.map((b) => b.max_y))
-  const pad = (maxX - minX) * 0.02
-  return `${minX - pad} ${-maxY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`
+  return {
+    minX: Math.min(...bounds.map((b) => b.min_x)),
+    maxX: Math.max(...bounds.map((b) => b.max_x)),
+    minY: Math.min(...bounds.map((b) => b.min_y)),
+    maxY: Math.max(...bounds.map((b) => b.max_y)),
+  }
+}
+
+export type ArtMode = 'both' | 'art' | 'diagram'
+
+// Over the art, only blocks with a trustworthy rate get filled. A flat
+// tint on everything washes the picture out and buries the one red block
+// among fifty grey ones, which is the opposite of what the overlay is
+// for. Blocks without enough plays keep their outline and let the art
+// through, so the eye lands on the blocks that actually mean something.
+// On the bare diagram there is no picture to protect, so everything is
+// filled and grey reads as "not enough plays" on its own.
+function fillOpacity(reliable: boolean, dimmed: boolean, overArt: boolean): number {
+  if (dimmed) return overArt ? 0 : 0.1
+  if (!overArt) return 0.85
+  return reliable ? 0.62 : 0
 }
 
 type Props = {
@@ -34,49 +51,96 @@ type Props = {
   /** Thumbnails are decorative and must not be keyboard stops. */
   interactive?: boolean
   title: string
+  /** URL of the assembled house picture, drawn under the diagram. */
+  artUrl?: string
+  mode?: ArtMode
 }
 
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title }: Props) {
-  const box = viewBox(blocks)
-  if (!box) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
-  const strokeWidth = Number(box.split(' ')[2]) / 220
+// The art is cropped to its opaque pixels, whose extent is exactly the
+// union of block bounds — so it is placed at that rect with no stored
+// offset. preserveAspectRatio="none" is correct here precisely because
+// the two rects are the same rect; letterboxing would misalign it.
+export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both' }: Props) {
+  const extent = extentOf(blocks)
+  if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
+  const width = extent.maxX - extent.minX
+  const height = extent.maxY - extent.minY
+  const pad = width * 0.02
+  const box = `${extent.minX - pad} ${-extent.maxY - pad} ${width + pad * 2} ${height + pad * 2}`
+  const strokeWidth = width / 220
+  const showArt = artUrl && mode !== 'diagram'
+  const showDiagram = mode !== 'art'
   return (
     <svg viewBox={box} className="house-canvas" role="img" aria-label={title}>
-      {blocks.map((block) => {
-        const points = pathFor(block)
-        if (!points) return null
-        const paint = block.is_ground
-          ? { color: UNPLAYED, label: 'ground — always placeable', reliable: false }
-          : paintFor(block.fall_rate, block.rate_is_reliable, block.placements)
-        const dimmed = wave != null && block.wave_index !== wave
-        const isSelected = selected === block.block_id
-        return (
-          <polygon
+      {showArt && (
+        <image
+          href={artUrl}
+          x={extent.minX}
+          y={-extent.maxY}
+          width={width}
+          height={height}
+          preserveAspectRatio="none"
+        />
+      )}
+      {showDiagram &&
+        blocks.map((block) => (
+          <BlockShape
             key={block.block_id}
-            points={points}
-            fill={paint.color}
-            fillOpacity={dimmed ? 0.12 : 0.85}
-            stroke={isSelected ? '#ffffff' : '#0b0d10'}
-            strokeWidth={isSelected ? strokeWidth * 3 : strokeWidth}
-            strokeOpacity={dimmed ? 0.2 : 1}
-            tabIndex={interactive && !dimmed ? 0 : undefined}
-            role={interactive && !dimmed ? 'button' : undefined}
-            aria-label={interactive ? `Detail ${block.block_id}, ${paint.label}` : undefined}
-            style={interactive && !dimmed ? { cursor: 'pointer' } : undefined}
-            onClick={interactive && !dimmed ? () => onSelect?.(block.block_id) : undefined}
-            onKeyDown={
-              interactive && !dimmed
-                ? (event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      onSelect?.(block.block_id)
-                    }
-                  }
-                : undefined
-            }
+            block={block}
+            dimmed={wave != null && block.wave_index !== wave}
+            isSelected={selected === block.block_id}
+            overArt={!!showArt}
+            strokeWidth={strokeWidth}
+            interactive={interactive}
+            onSelect={onSelect}
           />
-        )
-      })}
+        ))}
     </svg>
+  )
+}
+
+type ShapeProps = {
+  block: PuzzleHouseBlock
+  dimmed: boolean
+  isSelected: boolean
+  overArt: boolean
+  strokeWidth: number
+  interactive: boolean
+  onSelect?: (blockID: number) => void
+}
+
+function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect }: ShapeProps) {
+  const points = pathFor(block)
+  if (!points) return null
+  // A ground block is placeable at any time, so a fall rate would be
+  // meaningless for it — it is always neutral, never scored.
+  const paint = block.is_ground
+    ? { color: UNPLAYED, label: 'ground — always placeable', reliable: false }
+    : paintFor(block.fall_rate, block.rate_is_reliable, block.placements)
+  const clickable = interactive && !dimmed
+  return (
+    <polygon
+      points={points}
+      fill={paint.color}
+      fillOpacity={fillOpacity(paint.reliable, dimmed, overArt)}
+      stroke={isSelected ? '#ffffff' : '#0b0d10'}
+      strokeWidth={isSelected ? strokeWidth * 3 : strokeWidth}
+      strokeOpacity={dimmed ? 0.2 : 1}
+      tabIndex={clickable ? 0 : undefined}
+      role={clickable ? 'button' : undefined}
+      aria-label={interactive ? `Detail ${block.block_id}, ${paint.label}` : undefined}
+      style={clickable ? { cursor: 'pointer' } : undefined}
+      onClick={clickable ? () => onSelect?.(block.block_id) : undefined}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onSelect?.(block.block_id)
+              }
+            }
+          : undefined
+      }
+    />
   )
 }

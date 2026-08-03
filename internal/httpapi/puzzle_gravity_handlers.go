@@ -148,14 +148,9 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	cityID, err := strconv.Atoi(r.PathValue("city"))
+	cityID, houseID, err := pathCityHouse(r)
 	if err != nil {
-		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "city must be an integer"))
-		return
-	}
-	houseID, err := strconv.Atoi(r.PathValue("house"))
-	if err != nil {
-		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "house must be an integer"))
+		s.fail(w, r, requestID, start, err)
 		return
 	}
 	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
@@ -165,6 +160,53 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 	}
 	writeJSON(w, http.StatusOK, result)
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+// handlePuzzleHouseArt serves the assembled house picture the diagram is
+// drawn over. Content-Type comes from a strict allowlist checked at
+// import, never from the stored row alone.
+func (s *Server) handlePuzzleHouseArt(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	cityID, houseID, err := pathCityHouse(r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	revision := r.URL.Query().Get("revision")
+	art, err := analytics.GetPuzzleHouseArt(r.Context(), s.ReaderPool, projectID, revision, cityID, houseID)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	if art == nil {
+		s.fail(w, r, requestID, start, apierr.New(404, "invalid_request", "no art stored for this house and revision"))
+		return
+	}
+	w.Header().Set("Content-Type", art.MediaType)
+	// A revision is immutable, so its art can never change under a client.
+	// Private, because this is project-scoped content behind a session.
+	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(art.Image)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+func pathCityHouse(r *http.Request) (int, int, error) {
+	cityID, err := strconv.Atoi(r.PathValue("city"))
+	if err != nil {
+		return 0, 0, apierr.New(400, "invalid_request", "city must be an integer")
+	}
+	houseID, err := strconv.Atoi(r.PathValue("house"))
+	if err != nil {
+		return 0, 0, apierr.New(400, "invalid_request", "house must be an integer")
+	}
+	return cityID, houseID, nil
 }
 
 // gameplayRange resolves the project and date range both house endpoints

@@ -6,6 +6,7 @@ import { useAuth } from '../auth/useAuth'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
 import { HouseCanvas } from '../components/HouseCanvas'
+import type { ArtMode } from '../components/HouseCanvas'
 import { outcomeWords, paintFor, percent, ruleSentence } from '../components/houseColors'
 import { StatGrid, StatTile } from '../components/StatTile'
 import { useApiData } from '../hooks/useApiData'
@@ -66,6 +67,33 @@ function WaveTabs({ count, wave, onChange }: { count: number; wave: number | nul
   )
 }
 
+const ART_MODE_LABEL: Record<ArtMode, string> = {
+  both: 'Art + diagram',
+  art: 'Art only',
+  diagram: 'Diagram only',
+}
+
+function ArtModeTabs({ mode, onChange }: { mode: ArtMode; onChange: (m: ArtMode) => void }) {
+  return (
+    <div className="wave-tabs" role="group" aria-label="What to show">
+      {(Object.keys(ART_MODE_LABEL) as ArtMode[]).map((m) => (
+        <button key={m} type="button" aria-pressed={mode === m} onClick={() => onChange(m)}>
+          {ART_MODE_LABEL[m]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Grey has to be explained, not just shown: with a thin sample most of a
+// house is grey, and a reader who assumes grey means "fine" draws exactly
+// the wrong conclusion.
+function houseVerdict(worst: PuzzleHouseBlock | undefined): string {
+  return worst
+    ? `Detail ${worst.block_id} is the hardest part of this house — ${percent(worst.fall_rate)} of drops on it end in a fall.`
+    : 'No detail here has enough plays yet to judge. Grey means too few tries, not a good result.'
+}
+
 export function HouseDetailPage() {
   const { currentProject } = useAuth()
   const { city, house } = useParams()
@@ -73,10 +101,8 @@ export function HouseDetailPage() {
   const { from, to } = range.params
   const [wave, setWave] = useState<number | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
-  const fetchHouse = useCallback(
-    () => apiGet<PuzzleHouseDetail>(`/api/v1/analytics/gameplay/houses/${city}/${house}`, { project: currentProject, from, to }),
-    [currentProject, city, house, from, to],
-  )
+  const [artMode, setArtMode] = useState<ArtMode>('both')
+  const fetchHouse = useCallback(() => apiGet<PuzzleHouseDetail>(`/api/v1/analytics/gameplay/houses/${city}/${house}`, { project: currentProject, from, to }), [currentProject, city, house, from, to])
   const detail = useApiData(fetchHouse, `puzzle-house:${currentProject}:${city}:${house}:${from}:${to}`)
 
   if (!currentProject) return <p>Select a project to inspect a house.</p>
@@ -93,12 +119,9 @@ export function HouseDetailPage() {
       <Freshness loading={detail.loading} error={detail.error} stale={detail.stale} updatedAt={detail.updatedAt} />
       {detail.data && (
         <>
-          <p className="verdict">
-            {worst
-              ? `Detail ${worst.block_id} is the hardest part of this house — ${percent(worst.fall_rate)} of drops on it end in a fall.`
-              : 'No detail here has enough plays yet to judge. Grey means too few tries, not a good result.'}
-          </p>
+          <p className="verdict">{houseVerdict(worst)}</p>
           <WaveTabs count={detail.data.wave_count} wave={wave} onChange={setWave} />
+          <ArtModeTabs mode={artMode} onChange={setArtMode} />
           <div className="house-layout">
             <div className="house-stage">
               <HouseCanvas
@@ -106,6 +129,8 @@ export function HouseDetailPage() {
                 wave={wave}
                 selected={selected}
                 onSelect={setSelected}
+                artUrl={`/api/v1/analytics/gameplay/houses/${city}/${house}/art?project=${encodeURIComponent(currentProject)}&revision=${detail.data.content_revision}`}
+                mode={artMode}
                 title={`${detail.data.display_label || `House ${house}`}, coloured by how often each detail falls`}
               />
               <p className="muted">Click any detail to inspect it. Grey means ground, or too few tries to judge.</p>

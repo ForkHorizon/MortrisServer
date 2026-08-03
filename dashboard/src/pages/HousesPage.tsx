@@ -5,7 +5,7 @@ import type { PuzzleHouseList, PuzzleHouseSummary } from '../api/houseTypes'
 import { useAuth } from '../auth/useAuth'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
-import { RAMP_LEGEND, paintFor, percent } from '../components/houseColors'
+import { RAMP_LEGEND, UNPLAYED, paintFor, percent } from '../components/houseColors'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
 
@@ -39,6 +39,22 @@ function HouseCard({ house }: { house: PuzzleHouseSummary }) {
   )
 }
 
+function Legend() {
+  return (
+    <ul className="house-legend">
+      {RAMP_LEGEND.map(({ color, label }) => (
+        <li key={label}>
+          <span className="house-card-swatch small" style={{ background: color }} aria-hidden="true" /> {label}
+        </li>
+      ))}
+      <li>
+        <span className="house-card-swatch small" style={{ background: UNPLAYED }} aria-hidden="true" /> too few plays to
+        judge
+      </li>
+    </ul>
+  )
+}
+
 export function HousesPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
@@ -60,17 +76,7 @@ export function HousesPage() {
       {houses.data && (
         <>
           <p className="verdict">{houseVerdict(houses.data.houses)}</p>
-          <ul className="house-legend">
-            {RAMP_LEGEND.map(({ color, label }) => (
-              <li key={label}>
-                <span className="house-card-swatch small" style={{ background: color }} aria-hidden="true" /> {label}
-              </li>
-            ))}
-            <li>
-              <span className="house-card-swatch small" style={{ background: '#9aa1ad' }} aria-hidden="true" /> too few
-              plays to judge
-            </li>
-          </ul>
+          <Legend />
           <div className="house-grid">
             {played.map((house) => (
               <HouseCard key={`${house.city_id}-${house.house_id}`} house={house} />
