@@ -127,22 +127,35 @@ export.
 
 The house view renders two layers over one coordinate space:
 
-1. **Art layer** — the house's real `static_packed.png` as the
-   background, so the page looks like the game.
+1. **Art layer** — the house's real `composite.png` as the background, so
+   the page looks like the game. Note it is *not* the catalogue's
+   `preview_asset_key`: that points at `static_packed.png`, which turned
+   out to be the window/lights layer, not the assembled house.
 2. **Diagram layer** — block outlines on top, tinted by metric,
    clickable, labelled. This is what makes "which detail sits in which
    position" answerable at a glance.
 
-A toggle fades between them; the diagram alone stays fully legible for
-anyone who wants the schematic without the art. Per-piece sprites
-(`pieces/<visual_key>.png`) supply the thumbnail on the selected-detail
-panel.
+A three-way toggle switches between art + diagram, art only, and diagram
+only, so the schematic stays fully available to anyone who wants it.
 
-Assets are stored content-addressed on disk, keyed by
-`(project_id, content_revision)`, and served behind the existing
-dashboard auth. They are not embedded in the Go binary — the `go:embed`
-of `dashboard/dist` stays frontend-only. Budget is roughly 100 MB for
-house art plus the piece sprites.
+Over the art, only blocks with a trustworthy rate are filled. A flat tint
+on every block washes the picture out and buries the one red block among
+fifty grey ones — the opposite of what an overlay is for. Blocks without
+enough plays keep just their outline and let the art through.
+
+Placement needs no stored data. The art is cropped to its opaque pixels,
+and that crop's extent is exactly the union of the revision's block
+bounds — verified by overlaying outlines on the art, which land on the
+pediment, cornices, window frames and door. So the renderer places it
+with the rect it already computes for its viewBox, and there is no second
+copy of that rect to drift.
+
+Images live in Postgres, not on disk. Measured, the 103 houses come to
+4.2 MB as WebP cropped to 900px on the long edge — small enough that a
+filesystem store would buy nothing and cost a config path, a backup
+concern and orphan cleanup. In the database it is transactional with its
+revision and already covered by pgbackrest. The earlier ~100 MB estimate
+assumed uncompressed PNGs.
 
 ## Design principle
 
