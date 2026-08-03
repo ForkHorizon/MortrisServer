@@ -300,11 +300,18 @@ framing concern only:
   proxying to `127.0.0.1:8090` like `mortris.conf`.
   `deploy/staging/nginx-sdk-test.conf` is the existing precedent for a
   second Mortris hostname on the same box.
-- **Blocked on DNS.** `houseart.mortris.forkhorizon.com` does not resolve.
-  There is no wildcard on `*.mortris.forkhorizon.com` — `mortris` and
-  `sdk-test` are individual A records — so the record has to be added in
-  Cloudflare by hand, DNS-only, pointing at the VPS. Certbot cannot issue
-  for a name that does not resolve, so TLS waits on the same step.
+- **Live.** DNS A record added in Cloudflare (DNS-only, matching
+  `mortris` and `sdk-test`, which have no wildcard), and the shared
+  certificate expanded to eight hostnames in one `certbot --expand` call.
+  All eight verified serving valid TLS afterwards — passing only the new
+  name would have dropped the other five.
+- The host split is client-side (`dashboard/src/houseArtHost.ts`): on a
+  `houseart.` hostname the app lands on the house wall, pins the project,
+  and trims the navigation. It is presentation only — sessions, CSRF and
+  per-project checks are server-side and identical on both hostnames, so
+  editing the value in a browser grants nothing. The project is pinned
+  only if the account actually has access, otherwise it would pin to
+  something the server refuses with no way to change it.
 - TLS: `certbot --nginx --expand` must be run with **every** ForkHorizon
   hostname in one invocation, per the shared-cert gotcha already
   documented in `deploy/README.md` step 13. Adding this domain alone

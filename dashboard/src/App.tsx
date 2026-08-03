@@ -5,6 +5,7 @@ import { AuthProvider } from './auth/AuthContext'
 import { RequireAdmin, RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { isHouseArtHost } from './houseArtHost'
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const AskPage = lazy(() => import('./pages/AskPage').then((m) => ({ default: m.AskPage })))
@@ -24,7 +25,7 @@ const HouseDetailPage = lazy(() => import('./pages/HouseDetailPage').then((m) =>
 const GameplayDiagnosticsPage = lazy(() => import('./pages/GameplayDiagnosticsPage').then((m) => ({ default: m.GameplayDiagnosticsPage })))
 
 const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: boolean }> = [
-  { path: '/', Page: OverviewPage },
+  { path: '/', Page: isHouseArtHost() ? HousesPage : OverviewPage, adminOnly: isHouseArtHost() },
   { path: '/ask', Page: AskPage },
   { path: '/feed', Page: EventFeedPage },
   { path: '/events', Page: EventExplorerPage },

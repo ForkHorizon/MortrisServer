@@ -3,6 +3,18 @@ import type { ReactNode } from 'react'
 import { apiGet, apiPost, ApiError } from '../api/client'
 import type { LoginResponse, SessionInfo } from '../api/types'
 import { AuthContext } from './context'
+import { HOUSE_ART_PROJECT, isHouseArtHost } from '../houseArtHost'
+
+// On the houseart host the project is fixed, so the saved selection and
+// the first-project default are both ignored — but only if the account
+// actually has access, otherwise we would pin to a project the server
+// will refuse and every request would 403 with no way to change it.
+function pickProject(s: { projects: Array<{ id: string }> }): string {
+  const has = (id: string) => s.projects.some((project) => project.id === id)
+  if (isHouseArtHost() && has(HOUSE_ART_PROJECT)) return HOUSE_ART_PROJECT
+  const saved = localStorage.getItem('mortris_current_project')
+  return saved && has(saved) ? saved : s.projects[0]?.id ?? ''
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -13,8 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiGet<SessionInfo>('/api/v1/auth/session')
       .then((s) => {
         setSession(s)
-        const saved = localStorage.getItem('mortris_current_project')
-        setCurrentProjectState(s.projects.some((project) => project.id === saved) ? saved ?? '' : s.projects[0]?.id ?? '')
+        setCurrentProjectState(pickProject(s))
       })
       .catch(() => setSession(null))
       .finally(() => setLoading(false))
@@ -32,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     })
     setSession(res)
-    setCurrentProject(res.projects[0]?.id ?? '')
+    setCurrentProject(pickProject(res))
   }, [setCurrentProject])
 
   const logout = useCallback(async () => {

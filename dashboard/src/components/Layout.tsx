@@ -2,7 +2,12 @@ import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { SessionInfo } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { isHouseArtHost } from '../houseArtHost'
 import { useNewEventBadge } from '../hooks/useNewEventBadge'
+
+// '/' is deliberately absent: on this host it renders the house wall, so
+// a nav link still labelled "Overview" would point at Houses and lie.
+const HOUSE_ART_NAV = new Set(['/houses', '/gameplay'])
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
@@ -45,7 +50,7 @@ function SiteHeader({ session, currentProject, setCurrentProject, logout }: {
   return (
     <header className="site-header">
       <span className="brand">Mortris</span>
-      {session && session.projects.length > 0 && <label className="project-select">Project<select value={currentProject} onChange={(e) => setCurrentProject(e.target.value)}>{session.projects.map((project) => <option key={project.id} value={project.id}>{project.display_name} ({project.environment})</option>)}</select></label>}
+      {session && session.projects.length > 0 && !isHouseArtHost() && <label className="project-select">Project<select value={currentProject} onChange={(e) => setCurrentProject(e.target.value)}>{session.projects.map((project) => <option key={project.id} value={project.id}>{project.display_name} ({project.environment})</option>)}</select></label>}
       {session && <div className="header-user"><span>{session.username} ({session.role})</span><button type="button" onClick={() => void logout()}>Sign out</button></div>}
     </header>
   )
@@ -54,7 +59,12 @@ function SiteHeader({ session, currentProject, setCurrentProject, logout }: {
 function Navigation({ session, currentProject }: { session: SessionInfo; currentProject: string }) {
   const projectRole = session.projects.find((project) => project.id === currentProject)?.role
   const canManageCurrent = session.role === 'owner' || projectRole === 'project_admin'
-  const visibleItems = NAV_ITEMS.filter((item) => !item.ownerOnly || session.role === 'owner').filter((item) => !item.managerOnly || canManageCurrent)
+  // The houseart host exists for one thing, so it shows one thing. This
+  // hides links, not capability — every route stays reachable by URL and
+  // is still guarded server-side.
+  const visibleItems = NAV_ITEMS.filter((item) => !item.ownerOnly || session.role === 'owner')
+    .filter((item) => !item.managerOnly || canManageCurrent)
+    .filter((item) => !isHouseArtHost() || HOUSE_ART_NAV.has(item.to))
   const newEventCount = useNewEventBadge(currentProject)
   const { search } = useLocation()
   return (
