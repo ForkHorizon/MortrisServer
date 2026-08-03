@@ -1,4 +1,4 @@
-import type { PuzzleHouseBlock } from '../api/houseTypes'
+import type { PuzzleDrop, PuzzleHouseBlock } from '../api/houseTypes'
 import { UNPLAYED, paintFor } from './houseColors'
 
 // Milli-unit world space is y-up; SVG is y-down. Negating y at render time
@@ -54,13 +54,15 @@ type Props = {
   /** URL of the assembled house picture, drawn under the diagram. */
   artUrl?: string
   mode?: ArtMode
+  /** Release points to plot over the house. */
+  drops?: PuzzleDrop[]
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
 // union of block bounds — so it is placed at that rect with no stored
 // offset. preserveAspectRatio="none" is correct here precisely because
 // the two rects are the same rect; letterboxing would misalign it.
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both' }: Props) {
+export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops }: Props) {
   const extent = extentOf(blocks)
   if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
   const width = extent.maxX - extent.minX
@@ -95,6 +97,7 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
             onSelect={onSelect}
           />
         ))}
+      {drops && drops.length > 0 && <DropLayer drops={drops} scale={strokeWidth} />}
     </svg>
   )
 }
@@ -142,5 +145,56 @@ function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interacti
           : undefined
       }
     />
+  )
+}
+
+// Outcome colours for drop dots. Deliberately not the fall-rate ramp:
+// these encode *what happened*, not *how bad it is*, and reusing the ramp
+// would suggest an ordering between reasons that does not exist.
+const DROP_COLOR: Record<string, string> = {
+  placed: '#5aa96b',
+  fell_no_snap_target: '#e8a33d',
+  fell_missing_support: '#d94f4f',
+  fell_missing_rule: '#b06fd0',
+  returned: '#7a8faf',
+}
+
+type DropLayerProps = { drops: PuzzleDrop[]; scale: number }
+
+// Each dot is where a player let go; the line runs to the slot they were
+// aiming at. The line is what turns a cloud of dots into a direction —
+// "everyone releases below the slot" is invisible without it.
+export function DropLayer({ drops, scale }: DropLayerProps) {
+  return (
+    <g aria-hidden="true">
+      {drops.map((drop, i) => {
+        const color = DROP_COLOR[drop.outcome] ?? '#9aa1ad'
+        const hasTarget = drop.target_id >= 0
+        return (
+          <g key={`${drop.attempt_id}-${drop.block_id}-${i}`}>
+            {hasTarget && (
+              <line
+                x1={drop.release_x_milli}
+                y1={-drop.release_y_milli}
+                x2={drop.target_x_milli}
+                y2={-drop.target_y_milli}
+                stroke={color}
+                strokeWidth={scale * 0.5}
+                strokeOpacity={0.55}
+              />
+            )}
+            <circle
+              cx={drop.release_x_milli}
+              cy={-drop.release_y_milli}
+              r={scale * 2}
+              fill={color}
+              fillOpacity={0.9}
+              stroke="#0b0d10"
+              strokeWidth={scale * 0.3}
+            />
+          </g>
+        )
+      })}
+    </g>
   )
 }

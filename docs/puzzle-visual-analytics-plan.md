@@ -334,7 +334,10 @@ framing concern only:
    art layer with its art / diagram / both toggle. Migrations `0011`
    (art storage) and `0012` (its role grants). Replaces every table
    previously on the page.
-3. **P2 — drop-miss map** and the plain-language fall-reason breakdown.
+3. **P2 — drop-miss map. Done.** `GET /gameplay/houses/{city}/{house}/drops`,
+   optionally scoped to one detail, plotted over the house as dots with a
+   line to the slot the player was aiming at. Fall reasons already read in
+   plain language on the block panel.
 4. **P3 — attempt replay scrubber.**
 5. **P4 — support-graph overlay, retry ladder, time-to-place, pacing band,
    device and memory.**
@@ -416,6 +419,49 @@ This reorders the work. Aggregate views — the house wall, the
 outcome breakdown, the wave staircase — are meaningful **today**. The
 per-block X-ray paint is built now but will read mostly grey until more
 testers play, which is the honest state and should look like it.
+
+## Two data problems found while building P2
+
+Both are client-side and neither is fixed here. They limit what the drop
+map can say, and the second one quietly weakens the revision guarantee.
+
+### Release positions are in world space
+
+`CheckTruePositionService` sends `blockTransform.position`, a world
+coordinate, while blocks and targets are house-local. Each house sits at
+its own world offset, so the two frames differ by a constant per house.
+House 0/1 happens to sit near the origin, which is why this is invisible
+if you only check that one — houses 0/2 and 1/2 are offset by about 11
+and 12 units.
+
+`alignDrops` recovers the offset from the data: a placed drop is within
+the 1.5-unit snap radius of its target, so the median of
+`release - target` over placed drops is the offset. When the estimate is
+not tight enough to trust — spread wider than the snap radius, or fewer
+than five placed drops — the map refuses to draw rather than putting dots
+in the wrong place. Two of the five played houses currently refuse.
+
+**The real fix is one line in the client**: send the release position
+relative to the house root. After that `alignDrops` becomes a no-op for
+new data and every house plots.
+
+### No event references an imported content revision
+
+All 936 events carry per-house revisions produced by the client's local
+JSON-hash fallback (`Sha256(content.DataJson.text)`), 18 distinct values,
+each covering exactly one house. None was ever imported. That is exactly
+what `PuzzleAnalyticsContentCatalog.md` says must not happen in a test
+build — the exporter-generated
+`Resources/PuzzleAnalyticsContentRevisions.asset` either was not in the
+build or did not resolve at runtime.
+
+The consequence is that no query can join events to the catalogue by
+revision; the house view and drop map match on `(city, house, block)`
+against the latest imported revision instead. Block and target IDs are
+array indices and have been stable across these builds, so this is
+correct in practice today. It stops being correct the moment a house is
+re-authored with different indices — and the revision contract, which
+exists precisely to catch that, is not currently able to.
 
 ## Open questions
 
