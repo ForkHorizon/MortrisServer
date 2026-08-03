@@ -479,9 +479,17 @@ not tight enough to trust — spread wider than the snap radius, or fewer
 than five placed drops — the map refuses to draw rather than putting dots
 in the wrong place. Two of the five played houses currently refuse.
 
-**The real fix is one line in the client**: send the release position
-relative to the house root. After that `alignDrops` becomes a no-op for
-new data and every house plots.
+**Fixed in the client** (Puzzle, `CheckTruePositionService.ToHouseSpace`,
+2026-08-03, not yet built): release positions are now converted into the
+house's own space before being reported, using any target's parent as the
+frame, so a scaled or rotated house root is handled too. Gameplay is
+untouched — the value feeds analytics only.
+
+One consequence when that build ships: a date range spanning both old
+(world) and new (house-space) drops is bimodal, so the offset estimate
+will not fit and the map will refuse for that range. That is the correct
+behaviour rather than a regression — pick a range starting after the
+build, and ranges after the cutover need no correction at all.
 
 ### No event references an imported content revision
 
@@ -500,6 +508,16 @@ array indices and have been stable across these builds, so this is
 correct in practice today. It stops being correct the moment a house is
 re-authored with different indices — and the revision contract, which
 exists precisely to catch that, is not currently able to.
+
+**Root cause found and fixed** (2026-08-03, not yet built). It was not
+the exporter, which writes the asset correctly through
+`AssetDatabase.CreateAsset`. `PuzzleAnalyticsContentRevisions.asset` had
+been hand-written as YAML with `m_Script: {fileID: 0}` — no script
+binding — so Unity could not deserialize it and `Resources.Load` returned
+null without complaint, dropping the client onto its development
+fallback. The asset now carries the correct script guid; its 103 entries
+already point at the imported revision `09f3b91e…`, so the next build
+sends a revision Mortris can join on with no re-import needed.
 
 ## Open questions
 
