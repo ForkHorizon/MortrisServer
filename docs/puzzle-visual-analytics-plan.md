@@ -276,10 +276,15 @@ It stays **one binary, one port, one SPA bundle**. There is no second
 service to deploy, monitor or back up. The hostname is a routing and
 framing concern only:
 
-- nginx gains a server block for `houseart.mortris.forkhorizon.com`
-  proxying to `127.0.0.1:8090`, copied from `deploy/nginx/mortris.conf`.
+- nginx server block: `deploy/nginx/houseart.conf`, written and committed,
+  proxying to `127.0.0.1:8090` like `mortris.conf`.
   `deploy/staging/nginx-sdk-test.conf` is the existing precedent for a
   second Mortris hostname on the same box.
+- **Blocked on DNS.** `houseart.mortris.forkhorizon.com` does not resolve.
+  There is no wildcard on `*.mortris.forkhorizon.com` — `mortris` and
+  `sdk-test` are individual A records — so the record has to be added in
+  Cloudflare by hand, DNS-only, pointing at the VPS. Certbot cannot issue
+  for a name that does not resolve, so TLS waits on the same step.
 - TLS: `certbot --nginx --expand` must be run with **every** ForkHorizon
   hostname in one invocation, per the shared-cert gotcha already
   documented in `deploy/README.md` step 13. Adding this domain alone
