@@ -56,13 +56,19 @@ type Props = {
   mode?: ArtMode
   /** Release points to plot over the house. */
   drops?: PuzzleDrop[]
+  /** Replay mode: only these blocks are standing at this step. */
+  placed?: Set<number> | null
+  /** The detail the player is moving at this step. */
+  active?: number | null
+  /** Blocks the active detail was waiting on. */
+  missing?: Set<number>
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
 // union of block bounds — so it is placed at that rect with no stored
 // offset. preserveAspectRatio="none" is correct here precisely because
 // the two rects are the same rect; letterboxing would misalign it.
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops }: Props) {
+export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing }: Props) {
   const extent = extentOf(blocks)
   if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
   const width = extent.maxX - extent.minX
@@ -95,12 +101,15 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
             strokeWidth={strokeWidth}
             interactive={interactive}
             onSelect={onSelect}
+            replay={placed ? { standing: placed.has(block.block_id), active: active === block.block_id, missing: !!missing?.has(block.block_id) } : undefined}
           />
         ))}
       {drops && drops.length > 0 && <DropLayer drops={drops} scale={strokeWidth} />}
     </svg>
   )
 }
+
+type ReplayState = { standing: boolean; active: boolean; missing: boolean }
 
 type ShapeProps = {
   block: PuzzleHouseBlock
@@ -110,11 +119,40 @@ type ShapeProps = {
   strokeWidth: number
   interactive: boolean
   onSelect?: (blockID: number) => void
+  replay?: ReplayState
 }
 
-function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect }: ShapeProps) {
+// In replay the colour stops meaning "how often this falls" and starts
+// meaning "what is this block doing right now" — standing, in the
+// player's hand, or the thing they were waiting on. Mixing the two
+// scales in one picture would make neither readable.
+const REPLAY_STANDING = '#5f6b7d'
+const REPLAY_ACTIVE = '#e8a33d'
+const REPLAY_MISSING = '#d94f4f'
+
+function replayPaint(replay: ReplayState): { color: string; opacity: number; label: string } {
+  if (replay.active) return { color: REPLAY_ACTIVE, opacity: 0.95, label: 'being placed now' }
+  if (replay.missing) return { color: REPLAY_MISSING, opacity: 0.9, label: 'missing support' }
+  if (replay.standing) return { color: REPLAY_STANDING, opacity: 0.8, label: 'already placed' }
+  return { color: REPLAY_STANDING, opacity: 0.07, label: 'not placed yet' }
+}
+
+function BlockShape({ block, dimmed, isSelected, overArt, strokeWidth, interactive, onSelect, replay }: ShapeProps) {
   const points = pathFor(block)
   if (!points) return null
+  if (replay) {
+    const rp = replayPaint(replay)
+    return (
+      <polygon
+        points={points}
+        fill={rp.color}
+        fillOpacity={rp.opacity}
+        stroke={replay.active || replay.missing ? '#ffffff' : '#0b0d10'}
+        strokeWidth={replay.active || replay.missing ? strokeWidth * 2.5 : strokeWidth}
+        aria-label={`Detail ${block.block_id}, ${rp.label}`}
+      />
+    )
+  }
   // A ground block is placeable at any time, so a fall rate would be
   // meaningless for it — it is always neutral, never scored.
   const paint = block.is_ground

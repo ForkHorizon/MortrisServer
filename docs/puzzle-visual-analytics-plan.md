@@ -345,7 +345,26 @@ framing concern only:
    optionally scoped to one detail, plotted over the house as dots with a
    line to the slot the player was aiming at. Fall reasons already read in
    plain language on the block panel.
-4. **P3 — attempt replay scrubber.**
+4. **P3 — attempt replay. Done.** An attempt picker per house, ordered
+   worst-first because the reason to open one is almost always "show me
+   one that went badly", and a scrubber that steps through it: grey is
+   already standing, amber is the detail in the player's hand, red is
+   what it was waiting on. Each step carries the full placed set, so any
+   step renders without folding the ones before it.
+
+   Fixed while building it: `loadAttemptCatalog` looked up the attempt's
+   own `content_revision`, which is never imported, so every placement
+   silently reported no missing support — the feature looked like it
+   worked and always said "nothing was missing". `loadReplayCatalog`
+   falls back to the newest imported revision. On a real attempt that is
+   the difference between 0 and 5 of 7 falls naming what they were
+   waiting on.
+
+   The release arrow is deliberately not drawn here: the drop map already
+   shows release points, and it needs the world-to-house correction that
+   two of five houses cannot currently establish. Adding it would put an
+   arrow in the wrong place on exactly the houses that most need looking
+   at.
 5. **P4 — support-graph overlay, retry ladder, time-to-place, pacing band,
    device and memory.**
 

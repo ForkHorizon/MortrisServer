@@ -70,3 +70,38 @@ export interface PuzzleDropMap {
   alignment_issue?: 'too_few_placed' | 'inconsistent'
   offset_spread_milli: number
 }
+
+export interface PuzzleReplayStep {
+  index: number
+  name: string
+  at: string
+  block_id: number
+  target_id: number
+  outcome: string
+  rule_state: string
+  wave_index: number
+  placed: number[]
+  missing_support?: number[][]
+}
+
+export interface PuzzleReplay {
+  attempt_id: string
+  city_id: number
+  house_id: number
+  steps: PuzzleReplayStep[]
+  truncated: boolean
+}
+
+export interface PuzzleAttemptSummary {
+  attempt_id: string
+  started_at: string
+  wave_index: number
+  placements: number
+  falls: number
+  hints: number
+  completed: boolean
+}
+
+export interface PuzzleAttemptList {
+  attempts: PuzzleAttemptSummary[]
+}

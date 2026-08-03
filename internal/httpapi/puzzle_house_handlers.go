@@ -128,6 +128,50 @@ func pathCityHouse(r *http.Request) (int, int, error) {
 	return cityID, houseID, nil
 }
 
+func (s *Server) handlePuzzleAttempts(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, from, to, err := s.gameplayRange(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	cityID, houseID, err := pathCityHouse(r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	result, err := analytics.GetPuzzleAttempts(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"attempts": result})
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
+// handlePuzzleReplay exposes one player's raw step-by-step path through a
+// house, so it carries the same project-admin guard as the existing raw
+// attempt timeline rather than plain project access.
+func (s *Server) handlePuzzleReplay(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, err := requireProjectAccess(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	if err := requireProjectAdmin(sess, projectID); err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	result, err := analytics.GetPuzzleReplay(r.Context(), s.ReaderPool, projectID, r.PathValue("id"))
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 // gameplayRange resolves the project and date range both house endpoints
 // need, so neither can accidentally skip the project-access check.
 func (s *Server) gameplayRange(sess *adminauth.Session, r *http.Request) (string, time.Time, time.Time, error) {
