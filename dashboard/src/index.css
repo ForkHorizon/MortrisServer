@@ -412,3 +412,81 @@ th {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+
+/* House view (docs/puzzle-visual-analytics-plan.md). The canvas is the
+   primary content, so it gets the room; the block panel is secondary and
+   wraps underneath on narrow screens rather than squeezing the house. */
+.house-canvas {
+  /* Explicit height, not max-height: houses are tall and narrow, so
+     width:100% + height:auto blows the element up to thousands of pixels
+     and max-height never gets a chance to apply. With both set, the
+     viewBox letterboxes inside the box instead. */
+  width: 100%;
+  height: auto;
+  max-height: min(68vh, 720px);
+  min-height: 320px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.house-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .house-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.house-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.city-group { margin: 2rem 0; }
+.guided-summary { margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
+.guided-summary h2 { margin-top: 0; }
+.data-quality { border-left: 3px solid #e8a33d; padding: 0.5rem 0.75rem; background: var(--bg-alt); }
+.house-card {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: var(--bg-alt);
+}
+.house-card-art { position: relative; display: grid; place-items: center; width: 92px; min-height: 88px; overflow: hidden; border-radius: 5px; flex: none; }
+.house-card-art img { width: 100%; height: 100%; object-fit: cover; mix-blend-mode: multiply; }
+.house-card-rate { position: absolute; right: 0.3rem; bottom: 0.25rem; padding: 0.05rem 0.3rem; border-radius: 3px; background: color-mix(in srgb, var(--bg) 85%, transparent); font-weight: 700; }
+.house-card:hover { border-color: var(--accent); }
+.house-card-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.house-card-swatch { width: 10px; border-radius: 3px; flex: none; }
+.house-card-swatch.small { display: inline-block; width: 12px; height: 12px; vertical-align: middle; }
+.house-legend { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; color: var(--text-muted); }
+.wave-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; }
+.house-toolbar { display: grid; gap: 0.25rem; margin: 1rem 0; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
+.control-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.control-row > strong { min-width: 6.5rem; font-size: 0.85rem; }
+.control-row .wave-tabs { margin: 0; }
+.wave-tabs button[aria-pressed='true'] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.block-panel { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; background: var(--bg-alt); }
+.block-panel h2 { margin-top: 0; }
+
+/* Attempt replay */
+.replay-controls { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin: 0.75rem 0; }
+.house-canvas-frame { position: relative; }
+.canvas-zoom { display: flex; justify-content: flex-end; gap: 0.35rem; margin-bottom: 0.35rem; }
+.canvas-zoom button { font-size: 0.82rem; padding: 0.3rem 0.45rem; }
+.replay-controls input[type='range'] { flex: 1; min-width: 160px; }
+.attempt-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.attempt-list button { width: 100%; text-align: left; }
+.attempt-list button[aria-pressed='true'] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+details.attempts { margin-top: 1.5rem; }
+
+/* Support graph key */
+.support-key { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.support-key li { display: flex; align-items: center; gap: 0.45rem; }

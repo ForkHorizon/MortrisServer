@@ -70,6 +70,9 @@ func insertPuzzleHouse(ctx context.Context, tx pgx.Tx, projectID, revision strin
 
 func insertPuzzleBlocks(ctx context.Context, tx pgx.Tx, projectID, revision string, cityID int, house PuzzleCatalogHouse, waves map[int]int) error {
 	for _, block := range house.Blocks {
+		// Geometry columns are left NULL here and filled by
+		// ApplyPuzzleGeometry — see puzzle_geometry.go for why shapes
+		// are attached to a revision rather than carried inside it.
 		_, err := tx.Exec(ctx, `INSERT INTO puzzle_content_blocks (project_id,content_revision,city_id,house_id,wave_index,block_id,order_in_layer,visual_key,is_ground,local_x_milli,local_y_milli) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, projectID, revision, cityID, house.HouseID, waves[block.BlockID], block.BlockID, block.OrderInLayer, block.VisualKey, block.IsGround, block.LocalXMilli, block.LocalYMilli)
 		if err != nil {
 			return err

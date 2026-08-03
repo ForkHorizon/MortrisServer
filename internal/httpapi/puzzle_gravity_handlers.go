@@ -37,6 +37,58 @@ func (s *Server) handlePuzzleContentImport(w http.ResponseWriter, r *http.Reques
 	s.logRequest(r, requestID, http.StatusCreated, start, nil)
 }
 
+// maxPuzzleGeometryBody lives here rather than in server.go's limit block
+// because that file is at its 300-line ceiling, and this limit has exactly
+// one consumer.
+//
+// Geometry is bulkier than the catalogue it describes — every block carries
+// a silhouette, and the full 103-house export is around 4 MB. This ceiling
+// stays below the production nginx client_max_body_size of 10m
+// (deploy/nginx/mortris.conf), which would otherwise reject the upload
+// before it ever reached this limit. Geometry is additive per block, so an
+// export that outgrows this can be split across several uploads with no
+// special handling.
+const maxPuzzleGeometryBody = 8 * 1024 * 1024
+
+// handlePuzzleGeometryUpload attaches block shapes to a revision that has
+// already been imported. Same guard as the catalogue import — this writes
+// content, so it is project-admin plus CSRF, never merely project-scoped.
+func (s *Server) handlePuzzleGeometryUpload(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID := r.PathValue("id")
+	if !sess.HasProjectAccess(projectID) {
+		s.fail(w, r, requestID, start, apierr.New(403, adminauth.CodeForbiddenProject, "not scoped to this project"))
+		return
+	}
+	if err := requireProjectAdmin(sess, projectID); err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	if err := adminauth.CheckCSRF(r); err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	var geometry analytics.PuzzleGeometry
+	if err := decodeRequestWithLimits(w, r, &geometry, maxPuzzleGeometryBody, maxPuzzleGeometryBody); err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	// The revision in the path is authoritative: a payload claiming a
+	// different one is a mismatched export, and silently trusting the body
+	// would attach one revision's shapes to another's blocks.
+	if revision := r.PathValue("revision"); revision != geometry.ContentRevision {
+		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "content_revision in the body does not match the path"))
+		return
+	}
+	updated, err := analytics.ApplyPuzzleGeometry(r.Context(), s.Pool, projectID, geometry)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"blocks_updated": updated})
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 func (s *Server) handleGameplayDiagnostics(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
 	projectID, err := requireProjectAccess(sess, r)
