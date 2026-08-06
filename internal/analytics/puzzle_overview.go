@@ -55,7 +55,10 @@ func loadPuzzleOverviewEvents(ctx context.Context, pool *pgxpool.Pool, result *P
 SELECT COALESCE(properties->>'outcome',''), (properties->>'wave_index')::int,
        COUNT(*), COUNT(*) FILTER (WHERE properties->>'outcome' LIKE 'fell_%')
 FROM events WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3
-  AND name='placement_resolved' GROUP BY 1,2`, projectID, from, to)
+  AND name='placement_resolved'
+  AND COALESCE(properties->>'origin','player')='player'
+  AND COALESCE(properties->>'progress_origin','natural')='natural'
+GROUP BY 1,2`, projectID, from, to)
 	if err != nil {
 		return err
 	}
@@ -94,7 +97,9 @@ func loadPuzzleOverviewQuality(ctx context.Context, pool *pgxpool.Pool, result *
 	err := pool.QueryRow(ctx, `
 SELECT COUNT(*) FILTER (WHERE r.content_revision IS NULL), COUNT(*) FILTER (WHERE r.content_revision IS NOT NULL)
 FROM events e LEFT JOIN puzzle_content_revisions r ON r.project_id=e.project_id AND r.content_revision=e.properties->>'content_revision'
-WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3 AND e.name='placement_resolved'`, projectID, from, to).Scan(&legacy, &corrected)
+WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3 AND e.name='placement_resolved'
+  AND COALESCE(e.properties->>'origin','player')='player'
+  AND COALESCE(e.properties->>'progress_origin','natural')='natural'`, projectID, from, to).Scan(&legacy, &corrected)
 	result.DataQuality = PuzzleDataQuality{LegacyRevisionEvents: legacy, CoordinateStatus: coordinateStatus(legacy, corrected)}
 	return err
 }

@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"sort"
 	"time"
 
@@ -15,17 +17,21 @@ import (
 // shows the half-built house it failed against, which is the thing that
 // makes "why would anyone try that" answerable.
 type PuzzleReplayStep struct {
-	Index           int       `json:"index"`
-	Name            string    `json:"name"`
-	At              time.Time `json:"at"`
-	BlockID         int       `json:"block_id"`
-	TargetID        int       `json:"target_id"`
-	Outcome         string    `json:"outcome"`
-	RuleState       string    `json:"rule_state"`
-	WaveIndex       int       `json:"wave_index"`
-	ReleaseX        int       `json:"release_x_milli"`
-	ReleaseY        int       `json:"release_y_milli"`
-	ActiveElapsedMS int64     `json:"active_elapsed_ms"`
+	Index             int       `json:"index"`
+	Name              string    `json:"name"`
+	At                time.Time `json:"at"`
+	BlockID           int       `json:"block_id"`
+	TargetID          int       `json:"target_id"`
+	Outcome           string    `json:"outcome"`
+	RuleState         string    `json:"rule_state"`
+	WaveIndex         int       `json:"wave_index"`
+	ReleaseX          int       `json:"release_x_milli"`
+	ReleaseY          int       `json:"release_y_milli"`
+	ActiveElapsedMS   int64     `json:"active_elapsed_ms"`
+	InteractionID     string    `json:"interaction_id,omitempty"`
+	Origin            string    `json:"origin,omitempty"`
+	ProgressOrigin    string    `json:"progress_origin,omitempty"`
+	DeveloperActionID string    `json:"developer_action_id,omitempty"`
 	// Placed is the house state after this step, so a scrubber can render
 	// any step without replaying the ones before it.
 	Placed []int `json:"placed"`
@@ -35,12 +41,16 @@ type PuzzleReplayStep struct {
 }
 
 type PuzzleReplay struct {
-	AttemptID string             `json:"attempt_id"`
-	CityID    int                `json:"city_id"`
-	HouseID   int                `json:"house_id"`
-	InstallID string             `json:"install_id"`
-	Steps     []PuzzleReplayStep `json:"steps"`
-	Truncated bool               `json:"truncated"`
+	AttemptID           string             `json:"attempt_id"`
+	CityID              int                `json:"city_id"`
+	HouseID             int                `json:"house_id"`
+	InstallID           string             `json:"install_id"`
+	Steps               []PuzzleReplayStep `json:"steps"`
+	Truncated           bool               `json:"truncated"`
+	SequenceGaps        int                `json:"sequence_gaps"`
+	SequenceDuplicates  int                `json:"sequence_duplicates"`
+	OrphanInteractions  int                `json:"orphan_interactions"`
+	StateHashMismatches int                `json:"state_hash_mismatches"`
 }
 
 func GetPuzzleReplay(ctx context.Context, pool *pgxpool.Pool, projectID, attemptID string) (*PuzzleReplay, error) {
@@ -88,6 +98,8 @@ func loadReplayCatalog(ctx context.Context, pool *pgxpool.Pool, projectID, revis
 func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) *PuzzleReplay {
 	replay := &PuzzleReplay{AttemptID: attemptID, InstallID: raw.InstallID, Steps: []PuzzleReplayStep{}, Truncated: raw.Truncated, CityID: -1, HouseID: -1}
 	installed := map[int]bool{}
+	openInteractions := map[string]bool{}
+	lastEventIndex := -1
 	for i := range raw.Events {
 		payload, ok := attemptEventPayload(raw.Events[i].Properties)
 		if !ok {
@@ -96,18 +108,67 @@ func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) 
 		if replay.CityID < 0 {
 			replay.CityID, replay.HouseID = number(payload["city_id"]), number(payload["house_id"])
 		}
+		lastEventIndex = updateReplaySequence(replay, number(payload["attempt_event_index"]), lastEventIndex)
 		step := PuzzleReplayStep{
 			Index: len(replay.Steps), Name: raw.Events[i].Name, At: raw.Events[i].EffectiveAt,
 			BlockID: -1, TargetID: -1, WaveIndex: number(payload["wave_index"]),
 			ReleaseX: number(payload["release_x_milli"]), ReleaseY: number(payload["release_y_milli"]), ActiveElapsedMS: number64(payload["active_elapsed_ms"]),
 		}
-		if raw.Events[i].Name == "placement_resolved" {
-			installed = applyReplayPlacement(&step, catalog, installed, payload)
-		}
+		step.BlockID = number(payload["block_id"])
+		step.TargetID = number(payload["candidate_target_id"])
+		step.Outcome, _ = payload["outcome"].(string)
+		step.RuleState, _ = payload["rule_state"].(string)
+		step.InteractionID, _ = payload["interaction_id"].(string)
+		step.Origin, _ = payload["origin"].(string)
+		step.ProgressOrigin, _ = payload["progress_origin"].(string)
+		step.DeveloperActionID, _ = payload["developer_action_id"].(string)
+		updateReplayInteraction(openInteractions, step)
+		installed = applyReplayEvent(replay, &step, catalog, installed, payload)
 		step.Placed = sortedBlockIDs(installed)
 		replay.Steps = append(replay.Steps, step)
 	}
+	replay.OrphanInteractions = len(openInteractions)
 	return replay
+}
+
+func updateReplaySequence(replay *PuzzleReplay, eventIndex, previous int) int {
+	if eventIndex < 0 {
+		return previous
+	}
+	if eventIndex == previous {
+		replay.SequenceDuplicates++
+	} else if previous >= 0 && eventIndex > previous+1 {
+		replay.SequenceGaps += eventIndex - previous - 1
+	}
+	return eventIndex
+}
+
+func updateReplayInteraction(open map[string]bool, step PuzzleReplayStep) {
+	if step.InteractionID == "" {
+		return
+	}
+	if step.Name == "detail_taken" {
+		open[step.InteractionID] = true
+	} else if step.Name == "detail_returned" || step.Name == "interaction_abandoned" || step.Name == "placement_resolved" && step.Outcome == "placed" {
+		delete(open, step.InteractionID)
+	}
+}
+
+func applyReplayEvent(replay *PuzzleReplay, step *PuzzleReplayStep, catalog PuzzleCatalog, installed map[int]bool, payload map[string]any) map[int]bool {
+	if step.Name == "placement_resolved" {
+		return applyReplayPlacement(step, catalog, installed, payload)
+	}
+	if step.Name != "state_checkpoint" {
+		return installed
+	}
+	ids, exists := payload["placed_block_ids"].(string)
+	if !exists {
+		return installed
+	}
+	if hash, _ := payload["placed_state_hash"].(string); hash != "" && hash != fmt.Sprintf("%x", sha256.Sum256([]byte(ids))) {
+		replay.StateHashMismatches++
+	}
+	return integerSet(ids)
 }
 
 // applyReplayPlacement mirrors applyPlacementState but records the block,
@@ -147,19 +208,21 @@ func sortedBlockIDs(set map[int]bool) []int {
 
 // PuzzleAttemptSummary is one row of the attempt picker.
 type PuzzleAttemptSummary struct {
-	AttemptID        string    `json:"attempt_id"`
-	InstallID        string    `json:"install_id"`
-	StartedAt        time.Time `json:"started_at"`
-	WaveIndex        int       `json:"wave_index"`
-	Placements       int64     `json:"placements"`
-	Falls            int64     `json:"falls"`
-	Hints            int64     `json:"hints"`
-	Completed        bool      `json:"completed"`
-	AppVersion       string    `json:"app_version"`
-	BuildNumber      string    `json:"build_number"`
-	ActiveDurationMS int64     `json:"active_duration_ms"`
-	LastWaveIndex    int       `json:"last_wave_index"`
-	DominantFailure  string    `json:"dominant_failure"`
+	AttemptID         string    `json:"attempt_id"`
+	InstallID         string    `json:"install_id"`
+	StartedAt         time.Time `json:"started_at"`
+	WaveIndex         int       `json:"wave_index"`
+	Placements        int64     `json:"placements"`
+	Falls             int64     `json:"falls"`
+	Hints             int64     `json:"hints"`
+	Completed         bool      `json:"completed"`
+	AppVersion        string    `json:"app_version"`
+	BuildNumber       string    `json:"build_number"`
+	ActiveDurationMS  int64     `json:"active_duration_ms"`
+	LastWaveIndex     int       `json:"last_wave_index"`
+	DominantFailure   string    `json:"dominant_failure"`
+	ProgressOrigin    string    `json:"progress_origin"`
+	DeveloperAffected bool      `json:"developer_affected"`
 }
 
 func GetPuzzleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) ([]PuzzleAttemptSummary, error) {
@@ -177,13 +240,15 @@ SELECT properties->>'attempt_id', MIN(install_id::text),
        (array_agg(build_number ORDER BY effective_at DESC))[1],
        MAX(COALESCE((properties->>'active_elapsed_ms')::bigint,0)) - MIN(COALESCE((properties->>'active_elapsed_ms')::bigint,0)),
        MAX(COALESCE((properties->>'wave_index')::int,0)),
-       COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),'')
+       COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),''),
+       COALESCE((array_agg(properties->>'progress_origin' ORDER BY effective_at DESC) FILTER (WHERE properties ? 'progress_origin'))[1],'natural'),
+       COALESCE(BOOL_OR(properties->>'origin'='developer_menu' OR properties->>'close_reason'='developer_command'),false)
 FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
   AND properties ? 'attempt_id'
   AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
 GROUP BY 1
-ORDER BY 2 DESC
+ORDER BY MIN(effective_at) DESC
 LIMIT 200`, projectID, cityID, houseID, from, to)
 	if err != nil {
 		return nil, err
@@ -194,7 +259,7 @@ LIMIT 200`, projectID, cityID, houseID, from, to)
 		var row PuzzleAttemptSummary
 		if err := rows.Scan(&row.AttemptID, &row.InstallID, &row.StartedAt, &row.WaveIndex,
 			&row.Placements, &row.Falls, &row.Hints, &row.Completed, &row.AppVersion, &row.BuildNumber,
-			&row.ActiveDurationMS, &row.LastWaveIndex, &row.DominantFailure); err != nil {
+			&row.ActiveDurationMS, &row.LastWaveIndex, &row.DominantFailure, &row.ProgressOrigin, &row.DeveloperAffected); err != nil {
 			return nil, err
 		}
 		result = append(result, row)

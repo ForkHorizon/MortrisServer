@@ -204,6 +204,8 @@ WITH d AS (
       AND effective_at>=$5 AND effective_at<$6
       AND (properties->>'city_id')::int=$3 AND (properties->>'house_id')::int=$4
       AND properties ? 'release_x_milli' AND properties ? 'block_id'
+      AND COALESCE(properties->>'origin','player')='player'
+      AND COALESCE(properties->>'progress_origin','natural')='natural'
       AND ($7::int IS NULL OR (properties->>'block_id')::int=$7)
 )
 SELECT d.block_id, COALESCE(d.target_id,-1), d.outcome, d.release_x, d.release_y,

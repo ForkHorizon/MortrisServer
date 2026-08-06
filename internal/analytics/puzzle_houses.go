@@ -106,6 +106,8 @@ WITH house AS (
     FROM events
     WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
       AND properties ? 'house_id' AND properties ? 'attempt_id'
+      AND COALESCE(properties->>'origin','player')='player'
+      AND COALESCE(properties->>'progress_origin','natural')='natural'
 ), agg AS (
     SELECT city_id, house_id,
            COUNT(DISTINCT properties->>'attempt_id') attempts,

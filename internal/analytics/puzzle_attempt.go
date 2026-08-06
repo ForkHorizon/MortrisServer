@@ -48,7 +48,7 @@ func GetGameplayAttempt(ctx context.Context, pool *pgxpool.Pool, projectID, atte
 
 func loadGameplayAttemptEvents(ctx context.Context, pool *pgxpool.Pool, projectID, attemptID string) (*GameplayAttempt, error) {
 	result := &GameplayAttempt{AttemptID: attemptID, Events: []GameplayAttemptEvent{}}
-	rows, err := pool.Query(ctx, `SELECT event_id,name,effective_at,properties,install_id::text FROM events WHERE project_id=$1 AND properties->>'attempt_id'=$2 ORDER BY effective_at LIMIT 501`, projectID, attemptID)
+	rows, err := pool.Query(ctx, `SELECT event_id,name,effective_at,properties,install_id::text FROM events WHERE project_id=$1 AND properties->>'attempt_id'=$2 ORDER BY CASE WHEN properties->>'attempt_event_index' ~ '^[0-9]+$' THEN (properties->>'attempt_event_index')::int ELSE 2147483647 END, effective_at, event_id LIMIT 10001`, projectID, attemptID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +68,8 @@ func loadGameplayAttemptEvents(ctx context.Context, pool *pgxpool.Pool, projectI
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(result.Events) > 500 {
-		result.Events = result.Events[:500]
+	if len(result.Events) > 10000 {
+		result.Events = result.Events[:10000]
 		result.Truncated = true
 	}
 	return result, nil
@@ -98,6 +98,15 @@ func loadAttemptCatalog(ctx context.Context, pool *pgxpool.Pool, projectID, revi
 func populateMissingSupportGroups(events []GameplayAttemptEvent, catalog PuzzleCatalog) {
 	installed := map[int]bool{}
 	for i := range events {
+		if events[i].Name == "state_checkpoint" {
+			payload, ok := attemptEventPayload(events[i].Properties)
+			if ok {
+				if ids, exists := payload["placed_block_ids"].(string); exists {
+					installed = integerSet(ids)
+				}
+			}
+			continue
+		}
 		if events[i].Name != "placement_resolved" {
 			continue
 		}
