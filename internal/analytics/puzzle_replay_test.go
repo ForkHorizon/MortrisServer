@@ -84,3 +84,32 @@ func TestReplayReportsMissingSupport(t *testing.T) {
 		t.Fatalf("missing support = %v, want two alternatives", replay.Steps[0].MissingSupport)
 	}
 }
+
+func TestReplayCarriesInteractionAndAppliesCheckpoint(t *testing.T) {
+	raw := &GameplayAttempt{Events: []GameplayAttemptEvent{
+		replayEvent("detail_taken", map[string]any{"city_id": 1.0, "house_id": 2.0, "block_id": 10.0, "interaction_id": "move-1", "progress_origin": "natural"}),
+		replayEvent("detail_released", map[string]any{"city_id": 1.0, "house_id": 2.0, "block_id": 10.0, "candidate_target_id": 10.0, "interaction_id": "move-1"}),
+		replayEvent("state_checkpoint", map[string]any{"city_id": 1.0, "house_id": 2.0, "placed_block_ids": "10,11"}),
+	}}
+	replay := buildReplay("a", raw, testCatalog())
+	if replay.Steps[0].BlockID != 10 || replay.Steps[0].InteractionID != "move-1" {
+		t.Fatalf("take step lost interaction context: %+v", replay.Steps[0])
+	}
+	if replay.Steps[1].TargetID != 10 {
+		t.Fatalf("release target = %d, want 10", replay.Steps[1].TargetID)
+	}
+	if got := replay.Steps[2].Placed; len(got) != 2 || got[0] != 10 || got[1] != 11 {
+		t.Fatalf("checkpoint placed = %v, want [10 11]", got)
+	}
+}
+
+func TestReplayReportsSequenceAndInteractionIntegrity(t *testing.T) {
+	raw := &GameplayAttempt{Events: []GameplayAttemptEvent{
+		replayEvent("detail_taken", map[string]any{"city_id": 1.0, "house_id": 2.0, "block_id": 10.0, "interaction_id": "orphan", "attempt_event_index": 0.0}),
+		replayEvent("state_checkpoint", map[string]any{"city_id": 1.0, "house_id": 2.0, "placed_block_ids": "10", "placed_state_hash": "wrong", "attempt_event_index": 2.0}),
+	}}
+	replay := buildReplay("a", raw, testCatalog())
+	if replay.SequenceGaps != 1 || replay.OrphanInteractions != 1 || replay.StateHashMismatches != 1 {
+		t.Fatalf("integrity = gaps:%d orphans:%d hashes:%d", replay.SequenceGaps, replay.OrphanInteractions, replay.StateHashMismatches)
+	}
+}

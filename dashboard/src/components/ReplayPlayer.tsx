@@ -13,6 +13,9 @@ function missingBlocks(step: PuzzleReplayStep): number[] {
 }
 
 function stepSentence(step: PuzzleReplayStep): string {
+  if (step.name === 'detail_taken') return `Picked up detail ${step.block_id}.`
+  if (step.name === 'detail_released') return `Released detail ${step.block_id}${step.target_id >= 0 ? ` toward slot ${step.target_id}` : ''}.`
+  if (step.name === 'detail_returned') return `Detail ${step.block_id} returned to inventory.`
   if (step.name !== 'placement_resolved') return eventWords(step.name)
   if (step.outcome === 'placed') return `Detail ${step.block_id} went in.`
   const missing = missingBlocks(step)
@@ -22,8 +25,8 @@ function stepSentence(step: PuzzleReplayStep): string {
 }
 
 const EVENT_WORDS: Record<string, string> = {
-  house_opened: 'Opened the house.',
-  wave_presented: 'A new wave of details appeared.',
+  house_run_started: 'Started the house run.',
+  wave_attempt_started: 'A new wave attempt started.',
   detail_taken: 'Picked up a detail.',
   hint_used: 'Asked for the blueprint hint.',
   app_backgrounded: 'Left the app.',
@@ -31,6 +34,8 @@ const EVENT_WORDS: Record<string, string> = {
   wave_completed: 'Finished the wave.',
   house_completed: 'Finished the house.',
   attempt_closed: 'Attempt ended.',
+  attempt_recovered: 'Recovered the attempt after restart.',
+  state_checkpoint: 'Confirmed the saved house state.',
 }
 
 function eventWords(name: string): string {
@@ -103,11 +108,13 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
         interactive={false}
         title={`${label}, attempt replay at step ${index + 1}`}
         placed={new Set(step.placed)}
-        active={step.name === 'placement_resolved' ? step.block_id : null}
+        active={step.block_id >= 0 ? step.block_id : null}
         missing={new Set(missingBlocks(step))}
-        replayRelease={step.name === 'placement_resolved' ? { x: step.release_x_milli, y: step.release_y_milli, targetID: step.target_id } : null}
+        replayRelease={step.name === 'detail_released' || step.name === 'placement_resolved' ? { x: step.release_x_milli, y: step.release_y_milli, targetID: step.target_id } : null}
       />
       <p className="verdict">{stepSentence(step)}</p>
+      {step.progress_origin && step.progress_origin !== 'natural' && <p className="muted">Tester progress: {step.progress_origin.replace(/_/g, ' ')}.</p>}
+      {(replay.sequence_gaps > 0 || replay.sequence_duplicates > 0 || replay.orphan_interactions > 0 || replay.state_hash_mismatches > 0) && <p className="warning">Telemetry integrity: {replay.sequence_gaps} missing, {replay.sequence_duplicates} duplicate, {replay.orphan_interactions} unfinished interactions, {replay.state_hash_mismatches} state mismatches.</p>}
       {step.active_elapsed_ms >= 0 && <p className="muted">{Math.round(step.active_elapsed_ms / 1000)}s of active play into this attempt.</p>}
       <ReplayControls
         index={index}
@@ -117,7 +124,7 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
         setPlaying={setPlaying}
         setIndex={setIndex}
       />
-      {replay.truncated && <p className="muted">Only the first 500 events of this attempt are shown.</p>}
+      {replay.truncated && <p className="muted">Only the first 10,000 events of this attempt are shown.</p>}
     </div>
   )
 }

@@ -17,7 +17,9 @@ LEFT JOIN puzzle_content_revisions r
   ON r.project_id=e.project_id AND r.content_revision=e.properties->>'content_revision'
 WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3
   AND (e.properties->>'city_id')::int=$4 AND (e.properties->>'house_id')::int=$5
-  AND e.name='placement_resolved'`, projectID, from, to, detail.CityID, detail.HouseID).Scan(&legacy, &corrected)
+  AND e.name='placement_resolved'
+  AND COALESCE(e.properties->>'origin','player')='player'
+  AND COALESCE(e.properties->>'progress_origin','natural')='natural'`, projectID, from, to, detail.CityID, detail.HouseID).Scan(&legacy, &corrected)
 	if err != nil {
 		return err
 	}

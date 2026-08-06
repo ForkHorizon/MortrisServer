@@ -59,7 +59,9 @@ SELECT name, effective_at, properties FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
   AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
   AND name IN ('detail_taken','placement_resolved','hint_used')
-ORDER BY effective_at, event_id`, projectID, cityID, houseID, from, to)
+  AND COALESCE(properties->>'origin','player')='player'
+  AND COALESCE(properties->>'progress_origin','natural')='natural'
+ORDER BY properties->>'attempt_id', CASE WHEN properties->>'attempt_event_index' ~ '^[0-9]+$' THEN (properties->>'attempt_event_index')::int ELSE 2147483647 END, effective_at, event_id`, projectID, cityID, houseID, from, to)
 	if err != nil {
 		return nil, err
 	}

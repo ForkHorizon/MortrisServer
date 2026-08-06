@@ -148,6 +148,8 @@ WHERE project_id=$1 AND name='placement_resolved'
   AND effective_at>=$2 AND effective_at<$3
   AND (properties->>'city_id')::int=$4 AND (properties->>'house_id')::int=$5
   AND properties ? 'block_id'
+  AND COALESCE(properties->>'origin','player')='player'
+  AND COALESCE(properties->>'progress_origin','natural')='natural'
 GROUP BY 1,2`, projectID, from, to, detail.CityID, detail.HouseID)
 	if err != nil {
 		return err

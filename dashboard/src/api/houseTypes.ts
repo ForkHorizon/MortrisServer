@@ -129,6 +129,10 @@ export interface PuzzleReplayStep {
   release_x_milli: number
   release_y_milli: number
   active_elapsed_ms: number
+  interaction_id?: string
+  origin?: string
+  progress_origin?: string
+  developer_action_id?: string
   placed: number[]
   missing_support?: number[][]
 }
@@ -140,6 +144,10 @@ export interface PuzzleReplay {
   install_id: string
   steps: PuzzleReplayStep[]
   truncated: boolean
+  sequence_gaps: number
+  sequence_duplicates: number
+  orphan_interactions: number
+  state_hash_mismatches: number
 }
 
 export interface PuzzleAttemptSummary {
@@ -156,6 +164,8 @@ export interface PuzzleAttemptSummary {
   active_duration_ms: number
   last_wave_index: number
   dominant_failure: string
+  progress_origin: string
+  developer_affected: boolean
 }
 
 export interface PuzzleAttemptList {
