@@ -99,9 +99,9 @@ null silently. Fixed in the working tree, needs a build.
 > **Resolved.** Built and proven on a real Android smoke test (see
 > `docs/puzzle-analytics-remaining-plan.md` section 1): production events
 > now carry the imported revision `09f3b91e…` and join correctly. The
-> "latest imported revision" fallback described above still exists in
-> `loadReplayCatalog` for legacy/historical data — Stage 2 of that plan
-> retires it for current builds rather than leaving it silent.
+> replay resolver now rejects an unknown schema-v2 revision with a visible
+> `unknown_content_revision` failure. Legacy replay fallback remains
+> available only through an explicit legacy path and carries a warning.
 
 **2. Release positions were world coordinates.** Blocks and targets are
 house-local; each house sits at its own world offset. `alignDrops` in

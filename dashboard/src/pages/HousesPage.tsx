@@ -70,16 +70,16 @@ export function HousesPage() {
   const range = useDateRange()
   const { from, to } = range.params
   const [build, setBuild] = useState('')
-  const fetchHouses = useCallback(() => apiGet<PuzzleHouseList>('/api/v1/analytics/gameplay/houses', { project: currentProject, from, to }), [currentProject, from, to])
-  const fetchOverview = useCallback(() => apiGet<PuzzleOverview>('/api/v1/analytics/gameplay/overview', { project: currentProject, from, to }), [currentProject, from, to])
+  const fetchHouses = useCallback(() => apiGet<PuzzleHouseList>('/api/v1/analytics/gameplay/houses', { project: currentProject, from, to, build: build || undefined }), [currentProject, from, to, build])
+  const fetchOverview = useCallback(() => apiGet<PuzzleOverview>('/api/v1/analytics/gameplay/overview', { project: currentProject, from, to, build: build || undefined }), [currentProject, from, to, build])
   const fetchQuality = useCallback(() => apiGet<PuzzleQuality>('/api/v1/analytics/gameplay/quality', { project: currentProject, from, to, build: build || undefined }), [currentProject, from, to, build])
-  const houses = useApiData(fetchHouses, `puzzle-houses:${currentProject}:${from}:${to}`)
-  const overview = useApiData(fetchOverview, `puzzle-overview:${currentProject}:${from}:${to}`)
+  const houses = useApiData(fetchHouses, `puzzle-houses:${currentProject}:${from}:${to}:${build}`)
+  const overview = useApiData(fetchOverview, `puzzle-overview:${currentProject}:${from}:${to}:${build}`)
   const quality = useApiData(fetchQuality, `puzzle-quality:${currentProject}:${from}:${to}:${build}`)
   if (!currentProject) return <p>Select a project to see its houses.</p>
   const played = houses.data?.houses.filter((house) => house.placements > 0) ?? []
   const byCity = groupByCity(played)
   const untouched = houses.data?.houses.filter((house) => house.placements === 0) ?? []
   const revision = houses.data?.content_revision ?? ''
-  return <section aria-labelledby="houses-heading"><h1 id="houses-heading">Puzzle health</h1><p className="muted">Start with the summary, open a house, then click the detail that needs attention.</p><DateRangeFields range={range} /><Freshness loading={houses.loading || overview.loading} error={houses.error || overview.error} stale={houses.stale || overview.stale} updatedAt={houses.updatedAt} /><QualityBanner quality={quality.data} build={build} onBuildChange={setBuild} />{overview.data && <GuidedSummary overview={overview.data} />}<Legend />{byCity.map(([city, cityHouses]) => <CityGroup key={city} city={city} houses={cityHouses} project={currentProject} revision={revision} />)}{untouched.length > 0 && <details><summary>{untouched.length} houses nobody has opened in this range</summary><div className="house-grid">{untouched.map((house) => <HouseCard key={`${house.city_id}-${house.house_id}`} house={house} project={currentProject} revision={revision} />)}</div></details>}</section>
+  return <section aria-labelledby="houses-heading"><h1 id="houses-heading">Puzzle health</h1><p className="muted">Start with the summary, open a house, then click the detail that needs attention.</p><DateRangeFields range={range} /><Freshness loading={houses.loading || overview.loading || quality.loading} error={houses.error || overview.error || quality.error} stale={houses.stale || overview.stale || quality.stale} updatedAt={houses.updatedAt} /><QualityBanner quality={quality.data} error={quality.error} build={build} onBuildChange={setBuild} />{overview.data && <GuidedSummary overview={overview.data} />}<Legend />{byCity.map(([city, cityHouses]) => <CityGroup key={`${city}:${build}`} city={city} houses={cityHouses} project={currentProject} revision={revision} />)}{untouched.length > 0 && <details><summary>{untouched.length} houses nobody has opened in this range</summary><div className="house-grid">{untouched.map((house) => <HouseCard key={`${house.city_id}-${house.house_id}`} house={house} project={currentProject} revision={revision} />)}</div></details>}</section>
 }

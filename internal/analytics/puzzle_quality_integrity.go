@@ -25,21 +25,27 @@ func loadQualityIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, q *Puzzl
 	if q.SequenceGaps, q.SequenceDuplicates, err = querySequenceIntegrity(ctx, pool, projectID, from, to, build); err != nil {
 		return err
 	}
-	if q.HouseEventIndexGaps, q.HouseEventIndexDuplicates, err = queryPropertyIndexIntegrity(ctx, pool, projectID, from, to, build, "house_run_id", "house_event_index"); err != nil {
+	var invalid int64
+	if q.HouseEventIndexGaps, q.HouseEventIndexDuplicates, invalid, err = queryPropertyIndexIntegrity(ctx, pool, projectID, from, to, build, "house_run_id", "house_event_index"); err != nil {
 		return err
 	}
-	if q.AttemptEventIndexGaps, q.AttemptEventIndexDuplicates, err = queryPropertyIndexIntegrity(ctx, pool, projectID, from, to, build, "attempt_id", "attempt_event_index"); err != nil {
+	q.InvalidEventIndexes += invalid
+	if q.AttemptEventIndexGaps, q.AttemptEventIndexDuplicates, invalid, err = queryPropertyIndexIntegrity(ctx, pool, projectID, from, to, build, "attempt_id", "attempt_event_index"); err != nil {
 		return err
 	}
+	q.InvalidEventIndexes += invalid
 	return nil
 }
 
 func querySequenceIntegrity(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build *string) (gaps, dups int64, err error) {
 	err = pool.QueryRow(ctx, `
-		WITH ordered AS (
-			SELECT sequence, LAG(sequence) OVER (PARTITION BY install_id, session_id ORDER BY sequence) AS prev
-			FROM events
+		WITH touched AS (
+			SELECT DISTINCT install_id, session_id FROM events
 			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
+		), ordered AS (
+			SELECT e.sequence, LAG(e.sequence) OVER (PARTITION BY e.install_id, e.session_id ORDER BY e.sequence, e.effective_at, e.event_id) AS prev
+			FROM events e JOIN touched t USING (install_id, session_id)
+			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
 		)
 		SELECT COALESCE(SUM(GREATEST(sequence-prev-1,0)) FILTER (WHERE prev IS NOT NULL AND sequence>prev),0),
 		       COUNT(*) FILTER (WHERE prev IS NOT NULL AND sequence=prev)
@@ -54,21 +60,28 @@ func querySequenceIntegrity(ctx context.Context, pool *pgxpool.Pool, projectID s
 // querySequenceIntegrity's PARTITION BY directly. scopeKey/indexKey are
 // call-site literals (never user input), so building the query text is
 // safe.
-func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build *string, scopeKey, indexKey string) (gaps, dups int64, err error) {
+func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build *string, scopeKey, indexKey string) (gaps, dups, invalid int64, err error) {
 	sql := fmt.Sprintf(`
-		WITH scoped AS (
-			SELECT properties->>'%s' AS scope_id, (properties->>'%s')::int AS idx
+		WITH touched AS (
+			SELECT DISTINCT install_id, properties->>'%s' AS scope_id
 			FROM events
 			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
-			  AND properties ? '%s' AND properties ? '%s'
+			  AND properties ? '%s'
+		), scoped AS (
+			SELECT e.install_id, e.properties->>'%s' AS scope_id,
+			       CASE WHEN properties->>'%s' ~ '^[0-9]+$' THEN (properties->>'%s')::int END AS idx
+			FROM events e JOIN touched t ON t.install_id=e.install_id AND t.scope_id=e.properties->>'%s'
+			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
+			  AND e.properties ? '%s'
 		), ordered AS (
-			SELECT idx, LAG(idx) OVER (PARTITION BY scope_id ORDER BY idx) AS prev FROM scoped
+			SELECT idx, LAG(idx) OVER (PARTITION BY install_id, scope_id ORDER BY idx) AS prev FROM scoped WHERE idx IS NOT NULL
 		)
 		SELECT COALESCE(SUM(GREATEST(idx-prev-1,0)) FILTER (WHERE prev IS NOT NULL AND idx>prev),0),
-		       COUNT(*) FILTER (WHERE prev IS NOT NULL AND idx=prev)
+		       COUNT(*) FILTER (WHERE prev IS NOT NULL AND idx=prev),
+		       (SELECT COUNT(*) FROM scoped WHERE idx IS NULL)
 		FROM ordered
-	`, scopeKey, indexKey, scopeKey, indexKey)
-	err = pool.QueryRow(ctx, sql, projectID, from, to, build).Scan(&gaps, &dups)
+	`, scopeKey, scopeKey, scopeKey, indexKey, indexKey, scopeKey, indexKey)
+	err = pool.QueryRow(ctx, sql, projectID, from, to, build).Scan(&gaps, &dups, &invalid)
 	return
 }
 
@@ -79,6 +92,12 @@ func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projec
 // the naive check).
 func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	rows, err := pool.Query(ctx, `
+		WITH touched AS (
+			SELECT DISTINCT install_id, properties->>'interaction_id' AS interaction_id
+			FROM events
+			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
+			  AND properties ? 'interaction_id'
+		)
 		SELECT
 		  BOOL_OR(name='detail_taken'),
 		  BOOL_OR(name='detail_released'),
@@ -86,10 +105,9 @@ func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *P
 		  BOOL_OR(name='placement_resolved' AND properties->>'outcome'='placed'),
 		  BOOL_OR(name='detail_returned'),
 		  BOOL_OR(name='interaction_abandoned')
-		FROM events
-		WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
-		  AND properties ? 'interaction_id'
-		GROUP BY properties->>'interaction_id'
+		FROM events e JOIN touched t ON t.install_id=e.install_id AND t.interaction_id=e.properties->>'interaction_id'
+		WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
+		GROUP BY e.install_id, e.properties->>'interaction_id'
 	`, projectID, from, to, build)
 	if err != nil {
 		return err
@@ -149,12 +167,15 @@ func loadQualityRecoveredAndOpenRuns(ctx context.Context, pool *pgxpool.Pool, q 
 	}
 
 	if err := pool.QueryRow(ctx, `
-		WITH runs AS (
-			SELECT properties->>'house_run_id' AS run_id, MAX(effective_at) AS last_event_at, BOOL_OR(name='house_completed') AS completed
-			FROM events
+		WITH touched AS (
+			SELECT DISTINCT install_id, properties->>'house_run_id' AS run_id FROM events
 			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
 			  AND properties ? 'house_run_id'
-			GROUP BY 1
+		), runs AS (
+			SELECT e.install_id, e.properties->>'house_run_id' AS run_id, MAX(e.effective_at) AS last_event_at, BOOL_OR(e.name='house_completed') AS completed
+			FROM events e JOIN touched t ON t.install_id=e.install_id AND t.run_id=e.properties->>'house_run_id'
+			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
+			GROUP BY 1,2
 		)
 		SELECT COUNT(*) FILTER (WHERE NOT completed AND now()-last_event_at < make_interval(hours=>$5::int)),
 		       COUNT(*) FILTER (WHERE NOT completed AND now()-last_event_at >= make_interval(hours=>$5::int))
@@ -164,14 +185,17 @@ func loadQualityRecoveredAndOpenRuns(ctx context.Context, pool *pgxpool.Pool, q 
 	}
 
 	return pool.QueryRow(ctx, `
-		WITH attempts AS (
-			SELECT properties->>'attempt_id' AS attempt_id, MAX(effective_at) AS last_event_at,
-			       BOOL_OR(name IN ('wave_completed','house_completed')) AS completed,
-			       BOOL_OR(name='attempt_closed') AS closed
-			FROM events
+		WITH touched AS (
+			SELECT DISTINCT install_id, properties->>'attempt_id' AS attempt_id FROM events
 			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
 			  AND properties ? 'attempt_id'
-			GROUP BY 1
+		), attempts AS (
+			SELECT e.install_id, e.properties->>'attempt_id' AS attempt_id, MAX(e.effective_at) AS last_event_at,
+			       BOOL_OR(e.name IN ('wave_completed','house_completed')) AS completed,
+			       BOOL_OR(e.name='attempt_closed') AS closed
+			FROM events e JOIN touched t ON t.install_id=e.install_id AND t.attempt_id=e.properties->>'attempt_id'
+			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
+			GROUP BY 1,2
 		)
 		SELECT COUNT(*) FILTER (WHERE NOT completed AND NOT closed AND now()-last_event_at < make_interval(hours=>$5::int)),
 		       COUNT(*) FILTER (WHERE NOT completed AND NOT closed AND now()-last_event_at >= make_interval(hours=>$5::int))
@@ -183,15 +207,18 @@ func loadQualityRecoveredAndOpenRuns(ctx context.Context, pool *pgxpool.Pool, q 
 // no terminal result, and a progress mutation with no matching start.
 func loadQualityDeveloperPairing(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	return pool.QueryRow(ctx, `
-		WITH actions AS (
-			SELECT properties->>'developer_action_id' AS action_id,
-			       BOOL_OR(name='developer_command_started') AS has_start,
-			       BOOL_OR(name IN ('developer_command_completed','developer_command_failed','developer_command_noop')) AS has_terminal,
-			       BOOL_OR(name='developer_progress_mutated') AS has_mutation
-			FROM events
+		WITH touched AS (
+			SELECT DISTINCT install_id, properties->>'developer_action_id' AS action_id FROM events
 			WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
 			  AND properties ? 'developer_action_id'
-			GROUP BY 1
+		), actions AS (
+			SELECT e.install_id, e.properties->>'developer_action_id' AS action_id,
+			       BOOL_OR(e.name='developer_command_started') AS has_start,
+			       BOOL_OR(e.name IN ('developer_command_completed','developer_command_failed','developer_command_noop')) AS has_terminal,
+			       BOOL_OR(e.name='developer_progress_mutated') AS has_mutation
+			FROM events e JOIN touched t ON t.install_id=e.install_id AND t.action_id=e.properties->>'developer_action_id'
+			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
+			GROUP BY 1,2
 		)
 		SELECT COUNT(*) FILTER (WHERE has_start AND NOT has_terminal),
 		       COUNT(*) FILTER (WHERE has_mutation AND NOT has_start)

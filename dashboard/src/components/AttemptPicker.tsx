@@ -7,17 +7,17 @@ import { ReplayPlayer } from './ReplayPlayer'
 import { Timestamp } from './Timestamp'
 import { outcomeWords } from './houseColors'
 
-type Props = { project: string; city: string; house: string; from: string; to: string; blocks: PuzzleHouseBlock[]; label: string }
+type Props = { project: string; city: string; house: string; from: string; to: string; build?: string; blocks: PuzzleHouseBlock[]; label: string }
 
 // Attempts are listed worst-first rather than newest-first: the reason to
 // open a replay is almost always "show me one that went badly".
-export function AttemptPicker({ project, city, house, from, to, blocks, label }: Props) {
+export function AttemptPicker({ project, city, house, from, to, build, blocks, label }: Props) {
   const [selected, setSelected] = useState('')
   const fetchAttempts = useCallback(
-    () => apiGet<PuzzleAttemptList>(`/api/v1/analytics/gameplay/houses/${city}/${house}/attempts`, { project, from, to }),
-    [project, city, house, from, to],
+    () => apiGet<PuzzleAttemptList>(`/api/v1/analytics/gameplay/houses/${city}/${house}/attempts`, { project, from, to, build: build || undefined }),
+    [project, city, house, from, to, build],
   )
-  const attempts = useApiData(fetchAttempts, `puzzle-attempts:${project}:${city}:${house}:${from}:${to}`)
+  const attempts = useApiData(fetchAttempts, `puzzle-attempts:${project}:${city}:${house}:${from}:${to}:${build}`)
   const fetchReplay = useCallback(
     () => (selected ? apiGet<PuzzleReplay>(`/api/v1/analytics/gameplay/attempts/${encodeURIComponent(selected)}/replay`, { project }) : Promise.resolve(null)),
     [selected, project],

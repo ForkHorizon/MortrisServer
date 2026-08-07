@@ -16,13 +16,15 @@ import (
 // loadQualityIngestion answers "total received/accepted, duplicates" from
 // the durable per-batch counters (batch_persist.go) rather than the events
 // table, since rejections and duplicates are never inserted as event rows.
-// Not build-scoped: a rejected/duplicate event carries no parsed build.
-func loadQualityIngestion(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time) error {
+// These outcomes are scoped by received_at, the only trustworthy timestamp
+// for inputs the server rejected before an effective event time existed.
+func loadQualityIngestion(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	var accepted, duplicates, rejected int64
 	err := pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(accepted_count),0), COALESCE(SUM(duplicate_count),0), COALESCE(SUM(rejected_count),0)
 		FROM ingestion_stats WHERE project_id=$1 AND received_at>=$2 AND received_at<$3
-	`, projectID, from, to).Scan(&accepted, &duplicates, &rejected)
+		  AND ($4::text IS NULL OR build_number=$4)
+	`, projectID, from, to, build).Scan(&accepted, &duplicates, &rejected)
 	if err != nil {
 		return err
 	}
@@ -31,18 +33,19 @@ func loadQualityIngestion(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQual
 	return nil
 }
 
-// loadQualityRejections groups by (name, code) — the catalog-governance
-// counters already carry both, so no new table is needed. day is the
-// server-received UTC day, matching how recordRejectionStats buckets it.
-func loadQualityRejections(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time) error {
-	// day is a coarse date bucket (recordRejectionStats), not a timestamp,
-	// so the usual half-open [from, to) doesn't apply: to's own calendar
-	// day must stay included or a same-day range would match nothing.
+// loadQualityRejections groups the retained, received-time outcomes by
+// (name, code). Daily governance counters are deliberately not used: they
+// cannot represent a partial day or a selected build exactly.
+func loadQualityRejections(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
+	// Current rejections are retained individually at received_at. The old
+	// daily aggregate is intentionally not used here: it cannot answer a
+	// partial-day or build-scoped range without inventing data.
 	rows, err := pool.Query(ctx, `
-		SELECT name, code, SUM(count) FROM event_rejection_stats
-		WHERE project_id=$1 AND day>=$2::date AND day<=$3::date
+		SELECT name, code, COUNT(*) FROM event_rejection_occurrences
+		WHERE project_id=$1 AND received_at>=$2 AND received_at<$3
+		  AND ($4::text IS NULL OR build_number=$4)
 		GROUP BY 1,2 ORDER BY 3 DESC
-	`, projectID, from, to)
+	`, projectID, from, to, build)
 	if err != nil {
 		return err
 	}
@@ -62,14 +65,21 @@ func loadQualityRejections(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQua
 // schema_version=2 versus omits it entirely (item 4 of the plan's
 // required list).
 func loadQualitySchemaVersion(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
-	return pool.QueryRow(ctx, `
+	if err := pool.QueryRow(ctx, `
 		SELECT COUNT(*),
-		       COUNT(*) FILTER (WHERE (properties->>'schema_version')::int = 2),
-		       COUNT(*) FILTER (WHERE NOT (properties ? 'schema_version'))
+		       COUNT(*) FILTER (WHERE properties->>'schema_version' = '2'),
+		       COUNT(*) FILTER (WHERE NOT (properties ? 'schema_version')),
+		       COUNT(*) FILTER (WHERE properties ? 'schema_version' AND properties->>'schema_version' !~ '^[0-9]+$')
 		FROM events
 		WHERE project_id=$1 AND event_kind='product' AND effective_at>=$2 AND effective_at<$3
 		  AND ($4::text IS NULL OR build_number=$4)
-	`, projectID, from, to, build).Scan(&q.TotalGameplayEvents, &q.SchemaV2Events, &q.MissingSchemaVersion)
+	`, projectID, from, to, build).Scan(&q.TotalGameplayEvents, &q.SchemaV2Events, &q.MissingSchemaVersion, &q.InvalidSchemaVersion); err != nil {
+		return err
+	}
+	if q.TotalGameplayEvents > 0 {
+		q.SchemaV2Share = float64(q.SchemaV2Events) / float64(q.TotalGameplayEvents)
+	}
+	return nil
 }
 
 // loadQualityRevisionAndCoordinateSpace covers items 5 and 6: events whose
@@ -103,9 +113,9 @@ func loadQualityDistinctCounts(ctx context.Context, pool *pgxpool.Pool, q *Puzzl
 	return pool.QueryRow(ctx, `
 		SELECT COUNT(DISTINCT install_id),
 		       COUNT(DISTINCT (install_id, session_id)),
-		       COUNT(DISTINCT properties->>'house_run_id') FILTER (WHERE properties ? 'house_run_id'),
-		       COUNT(DISTINCT properties->>'attempt_id') FILTER (WHERE properties ? 'attempt_id'),
-		       COUNT(DISTINCT properties->>'interaction_id') FILTER (WHERE properties ? 'interaction_id')
+		       COUNT(DISTINCT (install_id, properties->>'house_run_id')) FILTER (WHERE properties ? 'house_run_id'),
+		       COUNT(DISTINCT (install_id, properties->>'attempt_id')) FILTER (WHERE properties ? 'attempt_id'),
+		       COUNT(DISTINCT (install_id, properties->>'interaction_id')) FILTER (WHERE properties ? 'interaction_id')
 		FROM events
 		WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3
 		  AND ($4::text IS NULL OR build_number=$4)

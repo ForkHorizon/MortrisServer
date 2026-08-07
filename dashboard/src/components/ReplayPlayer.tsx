@@ -115,6 +115,7 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
       <p className="verdict">{stepSentence(step)}</p>
       {step.progress_origin && step.progress_origin !== 'natural' && <p className="muted">Tester progress: {step.progress_origin.replace(/_/g, ' ')}.</p>}
       {(replay.sequence_gaps > 0 || replay.sequence_duplicates > 0 || replay.orphan_interactions > 0 || replay.state_hash_mismatches > 0) && <p className="warning">Telemetry integrity: {replay.sequence_gaps} missing, {replay.sequence_duplicates} duplicate, {replay.orphan_interactions} unfinished interactions, {replay.state_hash_mismatches} state mismatches.</p>}
+      {replay.revision_warning && <p className="warning">{replay.revision_warning}</p>}
       {step.active_elapsed_ms >= 0 && <p className="muted">{Math.round(step.active_elapsed_ms / 1000)}s of active play into this attempt.</p>}
       <ReplayControls
         index={index}

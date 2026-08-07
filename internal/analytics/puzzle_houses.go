@@ -59,7 +59,7 @@ func latestPuzzleRevision(ctx context.Context, pool *pgxpool.Pool, projectID str
 // outcomes, including houses nobody has opened — "nobody has played this"
 // is itself a finding, and hiding untouched houses would make the wall
 // silently describe only the corner of the game that happens to have data.
-func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (*PuzzleHouseList, error) {
+func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build ...*string) (*PuzzleHouseList, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	revision, err := latestPuzzleRevision(ctx, pool, projectID)
@@ -67,7 +67,7 @@ func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 		return nil, err
 	}
 	result := &PuzzleHouseList{ContentRevision: revision, Houses: []PuzzleHouseSummary{}}
-	rows, err := pool.Query(ctx, puzzleHousesQuery, projectID, revision, from, to)
+	rows, err := pool.Query(ctx, puzzleHousesQuery, projectID, revision, from, to, optionalBuild(build))
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,8 @@ WITH house AS (
            (properties->>'house_id')::int house_id,
            name, properties, install_id
     FROM events
-    WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
+	WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
+	  AND ($5::text IS NULL OR build_number=$5)
       AND properties ? 'house_id' AND properties ? 'attempt_id'
       AND COALESCE(properties->>'origin','player')='player'
       AND COALESCE(properties->>'progress_origin','natural')='natural'
@@ -142,3 +143,10 @@ JOIN puzzle_content_revisions r ON r.project_id=$1 AND r.content_revision=$2
 LEFT JOIN agg a ON a.city_id=h.city_id AND a.house_id=h.house_id
 LEFT JOIN detail_counts d ON d.city_id=h.city_id AND d.house_id=h.house_id
 ORDER BY COALESCE(a.placements,0) DESC, h.city_id, h.house_id`
+
+func optionalBuild(build []*string) *string {
+	if len(build) == 0 {
+		return nil
+	}
+	return build[0]
+}

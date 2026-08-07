@@ -78,11 +78,7 @@ func DecodeBatchIngestRequest(data []byte) (*BatchIngestRequest, []RejectedEvent
 	for _, raw := range env.Events {
 		var e Event
 		if err := decodeStrict(raw, &e); err != nil {
-			rejected = append(rejected, RejectedEvent{
-				EventID: bestEffortEventID(raw),
-				Name:    bestEffortName(raw),
-				Code:    decodeErrorCode(err),
-			})
+			rejected = append(rejected, bestEffortRejectedEvent(raw, decodeErrorCode(err)))
 			continue
 		}
 		req.Events = append(req.Events, e)
@@ -156,4 +152,15 @@ func bestEffortName(raw json.RawMessage) string {
 	}
 	_ = json.Unmarshal(raw, &probe)
 	return probe.Name
+}
+
+func bestEffortRejectedEvent(raw json.RawMessage, code string) RejectedEvent {
+	var probe struct {
+		EventID     string `json:"event_id"`
+		Name        string `json:"name"`
+		AppVersion  string `json:"app_version"`
+		BuildNumber string `json:"build_number"`
+	}
+	_ = json.Unmarshal(raw, &probe)
+	return RejectedEvent{EventID: probe.EventID, Name: probe.Name, Code: code, AppVersion: probe.AppVersion, BuildNumber: probe.BuildNumber}
 }

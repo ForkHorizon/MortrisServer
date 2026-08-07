@@ -148,6 +148,7 @@ export interface PuzzleReplay {
   sequence_duplicates: number
   orphan_interactions: number
   state_hash_mismatches: number
+  revision_warning?: string
 }
 
 export interface PuzzleAttemptSummary {
@@ -205,7 +206,9 @@ export interface PuzzleQuality {
 
   total_gameplay_events: number
   schema_v2_events: number
+  schema_v2_share: number
   missing_schema_version_events: number
+  invalid_schema_version_events: number
 
   unknown_revision_events: number
   invalid_coordinate_space_events: number
@@ -222,6 +225,7 @@ export interface PuzzleQuality {
   house_event_index_duplicates: number
   attempt_event_index_gaps: number
   attempt_event_index_duplicates: number
+  invalid_event_indexes: number
 
   orphan_interactions: number
   checkpoint_mismatches: number

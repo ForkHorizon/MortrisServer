@@ -51,6 +51,7 @@ type PuzzleReplay struct {
 	SequenceDuplicates  int                `json:"sequence_duplicates"`
 	OrphanInteractions  int                `json:"orphan_interactions"`
 	StateHashMismatches int                `json:"state_hash_mismatches"`
+	RevisionWarning     string             `json:"revision_warning,omitempty"`
 }
 
 func GetPuzzleReplay(ctx context.Context, pool *pgxpool.Pool, projectID, attemptID string) (*PuzzleReplay, error) {
@@ -63,36 +64,50 @@ func GetPuzzleReplay(ctx context.Context, pool *pgxpool.Pool, projectID, attempt
 	if len(raw.Events) == 0 {
 		return nil, apierr.New(404, "not_found", "attempt not found")
 	}
-	catalog, err := loadReplayCatalog(ctx, pool, projectID, raw.ContentRevision)
+	catalog, legacyFallback, err := loadReplayCatalog(ctx, pool, projectID, raw.ContentRevision, !attemptUsesSchemaV2(raw))
 	if err != nil {
 		return nil, err
 	}
-	return buildReplay(attemptID, raw, catalog), nil
+	replay := buildReplay(attemptID, raw, catalog)
+	if legacyFallback {
+		replay.RevisionWarning = "legacy replay uses the newest imported catalogue because its event revision is unavailable"
+	}
+	return replay, nil
 }
 
-// loadReplayCatalog falls back to the newest imported revision when the
-// attempt's own revision was never imported.
-//
-// That is currently every attempt: the client ships per-house JSON-hash
-// revisions that no catalogue upload matches, so a strict lookup returns
-// an empty catalogue and every placement silently reports no missing
-// support — the reconstruction looks like it works and always says
-// "nothing was missing". Falling back is the difference between a working
-// feature and a quietly empty one, and it is safe while block indices are
-// stable. See the plan doc's note on the revision mismatch.
-func loadReplayCatalog(ctx context.Context, pool *pgxpool.Pool, projectID, revision string) (PuzzleCatalog, error) {
+// loadReplayCatalog rejects a current-schema revision mismatch. Legacy
+// replays retain an explicitly-labelled fallback so old diagnostic data is
+// still viewable without making current content-pipeline failures invisible.
+func loadReplayCatalog(ctx context.Context, pool *pgxpool.Pool, projectID, revision string, allowLegacyFallback bool) (PuzzleCatalog, bool, error) {
 	catalog, err := loadAttemptCatalog(ctx, pool, projectID, revision)
 	if err != nil {
-		return catalog, err
+		return catalog, false, err
 	}
 	if len(catalog.Cities) > 0 {
-		return catalog, nil
+		return catalog, false, nil
+	}
+	if !allowLegacyFallback {
+		return catalog, false, apierr.New(409, "unknown_content_revision", "schema-v2 replay revision is not imported; replay was not resolved against a different catalogue")
 	}
 	latest, err := latestPuzzleRevision(ctx, pool, projectID)
 	if err != nil {
-		return catalog, err
+		return catalog, false, err
 	}
-	return loadAttemptCatalog(ctx, pool, projectID, latest)
+	catalog, err = loadAttemptCatalog(ctx, pool, projectID, latest)
+	return catalog, true, err
+}
+
+func attemptUsesSchemaV2(raw *GameplayAttempt) bool {
+	for _, event := range raw.Events {
+		payload, ok := attemptEventPayload(event.Properties)
+		if !ok {
+			continue
+		}
+		if number(payload["schema_version"]) >= 2 {
+			return true
+		}
+	}
+	return false
 }
 
 func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) *PuzzleReplay {
@@ -225,7 +240,7 @@ type PuzzleAttemptSummary struct {
 	DeveloperAffected bool      `json:"developer_affected"`
 }
 
-func GetPuzzleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) ([]PuzzleAttemptSummary, error) {
+func GetPuzzleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, build ...*string) ([]PuzzleAttemptSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	rows, err := pool.Query(ctx, `
@@ -245,11 +260,12 @@ SELECT properties->>'attempt_id', MIN(install_id::text),
        COALESCE(BOOL_OR(properties->>'origin'='developer_menu' OR properties->>'close_reason'='developer_command'),false)
 FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
+	  AND ($6::text IS NULL OR build_number=$6)
   AND properties ? 'attempt_id'
   AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
 GROUP BY 1
 ORDER BY MIN(effective_at) DESC
-LIMIT 200`, projectID, cityID, houseID, from, to)
+LIMIT 200`, projectID, cityID, houseID, from, to, optionalBuild(build))
 	if err != nil {
 		return nil, err
 	}

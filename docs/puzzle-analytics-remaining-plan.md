@@ -240,6 +240,14 @@ quality or segmentation error from an earlier stage.
 
 ## 5. Stage 2 — trust and data-quality control plane
 
+> **Cutover implemented (2026-08-07).** The quality endpoint and dashboard
+> card now expose the listed integrity buckets; schema-v2 replay revisions
+> resolve exactly or fail visibly, while legacy fallback is explicit and
+> warned. Local database-backed fixtures cover the full fall/return/retry
+> chain and malformed data. The remaining operational evidence is to run the
+> production build `9dccf3d…` card and record its green result; this document
+> does not claim that live verification from a code-only change.
+
 ### Goal
 
 Make it immediately visible whether the selected date range is safe to use.
@@ -286,9 +294,11 @@ Do not count a fall interaction as orphaned merely because
 
 ### Revision fallback decision
 
-`loadReplayCatalog` currently falls back to the newest imported revision when
-an event revision cannot be found. That workaround was necessary for legacy
-data but can hide future content-pipeline failures.
+**Resolved at the Stage 2 cutover.** `loadReplayCatalog` rejects an unknown
+schema-v2 revision instead of resolving it against the newest imported
+catalogue. The former fallback remains only for explicit legacy replay mode,
+which returns a warning. This preserves historical visibility without masking
+current content-pipeline failures.
 
 Perform these steps in order:
 

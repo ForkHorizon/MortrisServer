@@ -198,6 +198,7 @@ type AttemptsProps = {
   house: string
   from: string
   to: string
+  build?: string
   blocks: PuzzleHouseBlock[]
   label: string
 }
@@ -223,11 +224,12 @@ type BodyProps = {
   house: string
   from: string
   to: string
+  build?: string
   view: HouseControls
   dropMap: PuzzleDropMap | null | undefined
 }
 
-export function HouseBody({ detail, project, city, house, from, to, view, dropMap }: BodyProps) {
+export function HouseBody({ detail, project, city, house, from, to, build, view, dropMap }: BodyProps) {
   const blocks = detail.blocks
   const label = detail.display_label || `House ${house}`
   const worst = [...blocks].filter((b) => b.rate_is_reliable && !b.is_ground).sort((a, b) => b.fall_rate - a.fall_rate)[0]
@@ -265,7 +267,7 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         showSupport={view.showSupport}
         metric={view.metric}
       />
-      <AttemptsSection project={project} city={city} house={house} from={from} to={to} blocks={blocks} label={label} />
+      <AttemptsSection project={project} city={city} house={house} from={from} to={to} build={build} blocks={blocks} label={label} />
     </>
   )
 }

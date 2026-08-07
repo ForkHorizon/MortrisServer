@@ -511,11 +511,9 @@ build, and ranges after the cutover need no correction at all.
 > section 1).** `PuzzleAnalyticsContentRevisions.asset` now deserializes
 > correctly and the production smoke build sent the imported revision
 > `09f3b91e4e45313f973b3264536f62277bb22d414453a6e6f5a25c6e3211f23e`,
-> proven joinable on real Android traffic. `loadReplayCatalog`'s silent
-> fallback to the newest revision below is still in place for legacy data
-> and is exactly the workaround Stage 2 (section 5, "Revision fallback
-> decision") plans to retire for current builds — see that section before
-> changing it.
+> proven joinable on real Android traffic. Since Stage 2, an unknown
+> schema-v2 revision is rejected rather than silently resolving against the
+> newest catalogue. Historical legacy replay uses an explicit, warned mode.
 
 All 936 events carry per-house revisions produced by the client's local
 JSON-hash fallback (`Sha256(content.DataJson.text)`), 18 distinct values,

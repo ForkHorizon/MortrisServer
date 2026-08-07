@@ -30,17 +30,31 @@ function QualityDetails({ quality }: { quality: PuzzleQuality }) {
         <StatRow label="Accepted" value={quality.accepted_events} />
         <StatRow label="Duplicates" value={quality.duplicate_events} />
         <StatRow label="Rejected" value={quality.rejected_events} />
+        <StatRow label="Schema-v2 coverage (%)" value={Math.round(quality.schema_v2_share * 100)} />
+        <StatRow label="Invalid schema versions" value={quality.invalid_schema_version_events} />
         <StatRow label="Installs" value={quality.distinct_installs} />
         <StatRow label="House runs" value={quality.distinct_house_runs} />
         <StatRow label="Wave attempts" value={quality.distinct_wave_attempts} />
         <StatRow label="Interactions" value={quality.distinct_interactions} />
+        <StatRow label="SDK sequence gaps" value={quality.sequence_gaps} />
+        <StatRow label="SDK sequence duplicates" value={quality.sequence_duplicates} />
+        <StatRow label="House index gaps" value={quality.house_event_index_gaps} />
+        <StatRow label="Attempt index gaps" value={quality.attempt_event_index_gaps} />
+        <StatRow label="Invalid event indexes" value={quality.invalid_event_indexes} />
+        <StatRow label="Unknown revisions" value={quality.unknown_revision_events} />
+        <StatRow label="Invalid coordinate spaces" value={quality.invalid_coordinate_space_events} />
+        <StatRow label="Orphan interactions" value={quality.orphan_interactions} />
+        <StatRow label="Checkpoint mismatches" value={quality.checkpoint_mismatches} />
         <StatRow label="Recovered attempts" value={quality.recovered_attempts} />
         <StatRow label="House runs still open (recent)" value={quality.open_house_runs_recent} />
         <StatRow label="House runs still open (stale/lost)" value={quality.open_house_runs_stale} />
+        <StatRow label="Attempts still open (recent)" value={quality.open_attempts_recent} />
+        <StatRow label="Attempts still open (stale/lost)" value={quality.open_attempts_stale} />
         <StatRow label="Developer commands" value={quality.unpaired_developer_commands} />
         <StatRow label="Developer mutations without a start" value={quality.unpaired_developer_mutations} />
         <StatRow label="Delivery delay p50 (ms)" value={Math.round(quality.delivery_delay_ms.p50_ms)} />
         <StatRow label="Delivery delay p99 (ms)" value={Math.round(quality.delivery_delay_ms.p99_ms)} />
+        <StatRow label="Delivery delay max (ms)" value={Math.round(quality.delivery_delay_ms.max_ms)} />
       </ul>
       {quality.rejections.length > 0 && (
         <table className="quality-rejections">
@@ -74,15 +88,19 @@ function QualityDetails({ quality }: { quality: PuzzleQuality }) {
 // linking once a bucket needs it enough to justify widening every query.
 export function QualityBanner({
   quality,
+  error,
   build,
   onBuildChange,
 }: {
   quality: PuzzleQuality | null
+  error?: string | null
   build?: string
   onBuildChange?: (build: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
-  if (!quality) return null
+  if (!quality) {
+    return error ? <section className="quality-banner quality-banner--red" aria-label="Data quality"><strong>Data quality unavailable</strong><p className="quality-reasons">Rankings are visible, but their integrity could not be checked. {error}</p></section> : null
+  }
   const { status } = quality
   return (
     <section className={`quality-banner quality-banner--${status}`} aria-label="Data quality">
