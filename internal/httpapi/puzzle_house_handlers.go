@@ -16,12 +16,12 @@ import (
 
 func (s *Server) handlePuzzleHouses(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
-	projectID, from, to, err := s.gameplayRange(sess, r)
+	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleHouses(r.Context(), s.ReaderPool, projectID, from, to)
+	result, err := analytics.GetPuzzleHouses(r.Context(), s.ReaderPool, projectID, from, to, scope)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -32,7 +32,7 @@ func (s *Server) handlePuzzleHouses(w http.ResponseWriter, r *http.Request, sess
 
 func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
-	projectID, from, to, err := s.gameplayRange(sess, r)
+	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -42,7 +42,7 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to, scope)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -53,7 +53,7 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 
 func (s *Server) handlePuzzleDrops(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
-	projectID, from, to, err := s.gameplayRange(sess, r)
+	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -72,7 +72,7 @@ func (s *Server) handlePuzzleDrops(w http.ResponseWriter, r *http.Request, sess 
 		}
 		blockID = &parsed
 	}
-	result, err := analytics.GetPuzzleDrops(r.Context(), s.ReaderPool, projectID, cityID, houseID, blockID, from, to)
+	result, err := analytics.GetPuzzleDrops(r.Context(), s.ReaderPool, projectID, cityID, houseID, blockID, from, to, scope)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -184,4 +184,21 @@ func (s *Server) gameplayRange(sess *adminauth.Session, r *http.Request) (string
 		return "", time.Time{}, time.Time{}, err
 	}
 	return projectID, from, to, nil
+}
+
+// gameplayRangeAndScope is gameplayRange plus the Stage 3 traffic scope
+// (docs/puzzle-analytics-remaining-plan.md section 6) every Puzzle
+// aggregate endpoint must consistently accept, defaulting to natural_only
+// so a caller that omits it still gets the only scope safe to show as a
+// verdict.
+func (s *Server) gameplayRangeAndScope(sess *adminauth.Session, r *http.Request) (string, time.Time, time.Time, analytics.TrafficScope, error) {
+	projectID, from, to, err := s.gameplayRange(sess, r)
+	if err != nil {
+		return "", time.Time{}, time.Time{}, "", err
+	}
+	scope, err := analytics.ParseTrafficScope(r.URL.Query())
+	if err != nil {
+		return "", time.Time{}, time.Time{}, "", err
+	}
+	return projectID, from, to, scope, nil
 }

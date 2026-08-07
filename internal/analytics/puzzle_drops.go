@@ -68,7 +68,7 @@ const minPlacedForAlignment = 5
 // are labelled legacy and use the latest layout only as a best-effort
 // fallback. A mixed range is deliberately withheld rather than plotting
 // two coordinate spaces as though they agree.
-func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, blockID *int, from, to time.Time) (*PuzzleDropMap, error) {
+func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, blockID *int, from, to time.Time, scope TrafficScope) (*PuzzleDropMap, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	revision, err := latestPuzzleRevision(ctx, pool, projectID)
@@ -76,7 +76,7 @@ func GetPuzzleDrops(ctx context.Context, pool *pgxpool.Pool, projectID string, c
 		return nil, err
 	}
 	result := &PuzzleDropMap{Drops: []PuzzleDrop{}}
-	rows, err := pool.Query(ctx, puzzleDropsQuery, projectID, revision, cityID, houseID, from, to, blockID)
+	rows, err := pool.Query(ctx, puzzleDropsQuery(scope), projectID, revision, cityID, houseID, from, to, blockID)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,8 @@ func intAbs(v int) int {
 // slot that would have accepted the piece. Preferring the candidate and
 // falling back to the nearest is what makes a "fell nowhere near a slot"
 // drop still point at the slot the player was probably aiming for.
-const puzzleDropsQuery = `
+func puzzleDropsQuery(scope TrafficScope) string {
+	return `
 WITH d AS (
     SELECT (properties->>'block_id')::int block_id,
            NULLIF(COALESCE(
@@ -204,8 +205,7 @@ WITH d AS (
       AND effective_at>=$5 AND effective_at<$6
       AND (properties->>'city_id')::int=$3 AND (properties->>'house_id')::int=$4
       AND properties ? 'release_x_milli' AND properties ? 'block_id'
-      AND COALESCE(properties->>'origin','player')='player'
-      AND COALESCE(properties->>'progress_origin','natural')='natural'
+      AND ` + scope.eventPredicate() + `
       AND ($7::int IS NULL OR (properties->>'block_id')::int=$7)
 )
 SELECT d.block_id, COALESCE(d.target_id,-1), d.outcome, d.release_x, d.release_y,
@@ -218,3 +218,4 @@ LEFT JOIN puzzle_content_targets t
       AND t.city_id=$3 AND t.house_id=$4 AND t.target_id=d.target_id
 ORDER BY d.block_id
 LIMIT 2000`
+}
