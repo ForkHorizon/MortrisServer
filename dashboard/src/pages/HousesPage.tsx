@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { PuzzleHouseList, PuzzleHouseSummary, PuzzleOverview, PuzzleQuality, PuzzleTesterImpact, TrafficScope } from '../api/houseTypes'
+import type { EvidenceState, PuzzleHouseList, PuzzleHouseSummary, PuzzleOverview } from '../api/houseTypes'
+import type { PuzzleQuality, PuzzleTesterImpact, TrafficScope } from '../api/puzzleQualityTypes'
 import { useAuth } from '../auth/useAuth'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
@@ -12,6 +13,13 @@ import { TesterImpactPanel } from '../components/TesterImpactPanel'
 import { ScopeCaveat, TrafficScopeSelect } from '../components/TrafficScopeSelect'
 import { useApiData } from '../hooks/useApiData'
 import { useDateRange } from '../hooks/useDateRange'
+
+const EVIDENCE_LABEL: Record<EvidenceState, string> = {
+  unplayed: 'unplayed',
+  thin: 'too few plays',
+  usable: 'usable evidence',
+  mixed_quality: 'usable, tester activity too',
+}
 
 function HouseCard({ house, project, revision }: { house: PuzzleHouseSummary; project: string; revision: string }) {
   const paint = paintFor(house.fall_rate, house.rate_is_reliable, house.placements)
@@ -24,10 +32,14 @@ function HouseCard({ house, project, revision }: { house: PuzzleHouseSummary; pr
       </span>
       <span className="house-card-body">
         <strong>{house.display_label || `House ${house.house_id}`}</strong>
-        <span className="muted">city {house.city_id} · house {house.house_id}</span>
+        <span className="muted">city {house.city_id} · house {house.house_id} · {EVIDENCE_LABEL[house.evidence_state]}</span>
         <span>{house.rate_is_reliable ? `${percent(house.fall_rate)} of drops fall` : paint.label}</span>
-        <span className="muted">{house.opened_attempts} opened · {house.completed_attempts} finished · {house.unique_installations} anonymous installs</span>
-        <span className="muted">{house.reliable_detail_count} of {house.played_detail_count} played details are reliable{house.dominant_failure ? ` · mostly ${outcomeWords(house.dominant_failure)}` : ''}{house.has_geometry ? '' : ' · no shapes yet'}</span>
+        <span className="muted">
+          {house.natural_house_runs_started} natural run{house.natural_house_runs_started === 1 ? '' : 's'} started ·{' '}
+          {house.natural_house_runs_started > 0 ? `${percent(house.natural_completion_rate)} completed` : 'none completed'} ·{' '}
+          {house.unique_installations} anonymous installs
+        </span>
+        <span className="muted">wave {house.waves_reached} of {house.total_waves} reached · {house.reliable_detail_count} of {house.played_detail_count} played details are reliable{house.dominant_failure ? ` · mostly ${outcomeWords(house.dominant_failure)}` : ''}{house.has_geometry ? '' : ' · no shapes yet'}</span>
       </span>
     </Link>
   )
@@ -75,6 +87,16 @@ function groupByCity(houses: PuzzleHouseSummary[]): Array<[number, PuzzleHouseSu
   return [...groups].sort(([a], [b]) => a - b)
 }
 
+// "Worst first" only ranks houses with sufficient evidence (plan section
+// 7) — unplayed and thin houses go in the coverage-work list below
+// instead, so a designer never mistakes "nobody has tried this" or "two
+// people tried this" for an easy house.
+const RANKABLE: EvidenceState[] = ['usable', 'mixed_quality']
+
+function sortWorstFirst(houses: PuzzleHouseSummary[]): PuzzleHouseSummary[] {
+  return [...houses].sort((a, b) => b.fall_rate - a.fall_rate)
+}
+
 export function HousesPage() {
   const { currentProject } = useAuth()
   const range = useDateRange()
@@ -90,9 +112,10 @@ export function HousesPage() {
   const quality = useApiData(fetchQuality, `puzzle-quality:${currentProject}:${from}:${to}:${build}`)
   const testerImpact = useApiData(fetchTesterImpact, `puzzle-tester-impact:${currentProject}:${from}:${to}`)
   if (!currentProject) return <p>Select a project to see its houses.</p>
-  const played = houses.data?.houses.filter((house) => house.placements > 0) ?? []
-  const byCity = groupByCity(played)
-  const untouched = houses.data?.houses.filter((house) => house.placements === 0) ?? []
+  const all = houses.data?.houses ?? []
+  const rankable = sortWorstFirst(all.filter((house) => RANKABLE.includes(house.evidence_state)))
+  const byCity = groupByCity(rankable)
+  const coverageWork = all.filter((house) => !RANKABLE.includes(house.evidence_state))
   const revision = houses.data?.content_revision ?? ''
-  return <section aria-labelledby="houses-heading"><h1 id="houses-heading">Puzzle health</h1><p className="muted">Start with the summary, open a house, then click the detail that needs attention.</p><DateRangeFields range={range} /><TrafficScopeSelect scope={scope} onChange={setScope} /><Freshness loading={houses.loading || overview.loading} error={houses.error || overview.error} stale={houses.stale || overview.stale} updatedAt={houses.updatedAt} /><QualityBanner quality={quality.data} build={build} onBuildChange={setBuild} /><ScopeCaveat scope={scope} /><TesterImpactPanel impact={testerImpact.data} />{overview.data && <GuidedSummary overview={overview.data} scope={scope} />}<Legend />{byCity.map(([city, cityHouses]) => <CityGroup key={city} city={city} houses={cityHouses} project={currentProject} revision={revision} />)}{untouched.length > 0 && <details><summary>{untouched.length} houses nobody has opened in this range</summary><div className="house-grid">{untouched.map((house) => <HouseCard key={`${house.city_id}-${house.house_id}`} house={house} project={currentProject} revision={revision} />)}</div></details>}</section>
+  return <section aria-labelledby="houses-heading"><h1 id="houses-heading">Puzzle health</h1><p className="muted">Start with the summary, open a house, then click the detail that needs attention.</p><DateRangeFields range={range} /><TrafficScopeSelect scope={scope} onChange={setScope} /><Freshness loading={houses.loading || overview.loading} error={houses.error || overview.error} stale={houses.stale || overview.stale} updatedAt={houses.updatedAt} /><QualityBanner quality={quality.data} build={build} onBuildChange={setBuild} /><ScopeCaveat scope={scope} /><TesterImpactPanel impact={testerImpact.data} />{overview.data && <GuidedSummary overview={overview.data} scope={scope} />}<Legend />{byCity.map(([city, cityHouses]) => <CityGroup key={city} city={city} houses={cityHouses} project={currentProject} revision={revision} />)}{coverageWork.length > 0 && <details><summary>{coverageWork.length} houses need more natural play before ranking ({coverageWork.filter((h) => h.evidence_state === 'unplayed').length} unplayed, {coverageWork.filter((h) => h.evidence_state === 'thin').length} too few plays)</summary><div className="house-grid">{coverageWork.map((house) => <HouseCard key={`${house.city_id}-${house.house_id}`} house={house} project={currentProject} revision={revision} />)}</div></details>}</section>
 }

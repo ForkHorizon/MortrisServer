@@ -161,10 +161,7 @@ func GetPuzzleQuality(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	if err := loadQualityIndexIntegrity(ctx, pool, q, projectID, from, to, build); err != nil {
 		return nil, err
 	}
-	if err := loadQualityOrphanInteractions(ctx, pool, q, projectID, from, to, build); err != nil {
-		return nil, err
-	}
-	if err := loadQualityCheckpointMismatches(ctx, pool, q, projectID, from, to, build); err != nil {
+	if err := loadQualityInteractionAndCheckpointIntegrity(ctx, pool, q, projectID, from, to, build); err != nil {
 		return nil, err
 	}
 	if err := loadQualityRecoveredAndOpenRuns(ctx, pool, q, projectID, from, to, build); err != nil {

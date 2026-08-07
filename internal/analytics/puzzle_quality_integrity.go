@@ -72,12 +72,12 @@ func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projec
 	return
 }
 
-// loadQualityOrphanInteractions is item 11. An interaction is only
-// orphaned if it never reaches a terminal event at all — a fall whose
-// return is a later detail_returned with the same interaction_id is
-// complete, not orphaned (see the plan doc's explicit warning against
-// the naive check).
-func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
+// loadQualityInteractionAndCheckpointIntegrity is items 11 and 12. An
+// interaction is only orphaned if it never reaches a terminal event at
+// all — a fall whose return is a later detail_returned with the same
+// interaction_id is complete, not orphaned (see the plan doc's explicit
+// warning against the naive check).
+func loadQualityInteractionAndCheckpointIntegrity(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	rows, err := pool.Query(ctx, `
 		SELECT
 		  BOOL_OR(name='detail_taken'),
@@ -94,11 +94,11 @@ func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *P
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	var orphans int64
 	for rows.Next() {
 		var hasTake, hasRelease, hasResolution, placed, hasReturn, hasAbandoned bool
 		if err := rows.Scan(&hasTake, &hasRelease, &hasResolution, &placed, &hasReturn, &hasAbandoned); err != nil {
+			rows.Close()
 			return err
 		}
 		terminal := placed || hasReturn || hasAbandoned
@@ -106,12 +106,12 @@ func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *P
 			orphans++
 		}
 	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	q.OrphanInteractions = orphans
-	return rows.Err()
-}
 
-// loadQualityCheckpointMismatches is item 12.
-func loadQualityCheckpointMismatches(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	checkpoints, err := pool.Query(ctx, `
 		SELECT properties->>'placed_block_ids', properties->>'placed_state_hash'
 		FROM events
