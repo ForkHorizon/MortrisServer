@@ -15,7 +15,7 @@ func (s *Server) handlePuzzleOverview(w http.ResponseWriter, r *http.Request, se
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleOverview(r.Context(), s.ReaderPool, projectID, from, to)
+	result, err := analytics.GetPuzzleOverview(r.Context(), s.ReaderPool, projectID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

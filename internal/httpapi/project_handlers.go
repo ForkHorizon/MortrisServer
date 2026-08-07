@@ -52,6 +52,7 @@ func trimmed(value *string) *string {
 }
 
 var projectPurgeQueries = []string{
+	`DELETE FROM event_rejection_occurrences WHERE project_id = $1`,
 	`DELETE FROM ingestion_stats WHERE project_id = $1`,
 	`DELETE FROM daily_registration_counters WHERE project_id = $1`,
 	`DELETE FROM client_policy_rules WHERE project_id = $1`,

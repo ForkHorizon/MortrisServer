@@ -448,6 +448,25 @@ th {
 .guided-summary { margin: 1rem 0 1.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
 .guided-summary h2 { margin-top: 0; }
 .data-quality { border-left: 3px solid #e8a33d; padding: 0.5rem 0.75rem; background: var(--bg-alt); }
+
+/* Stage 2 quality control plane (section 5) — status colors reuse
+   --danger for red; green/amber/grey are literals like .data-quality's
+   existing amber, since the app has no semantic success/warning tokens
+   yet and adding them for one banner would be new abstraction for no
+   second user. */
+.quality-banner { margin: 1rem 0; padding: 0.75rem 1rem; border-radius: 8px; border-left: 4px solid var(--border); background: var(--bg-alt); }
+.quality-banner--green { border-left-color: #2e7d32; }
+.quality-banner--amber { border-left-color: #e8a33d; }
+.quality-banner--red { border-left-color: var(--danger); }
+.quality-banner--grey { border-left-color: var(--text-muted); }
+.quality-banner-head { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.quality-build-select { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--text-muted); }
+.link-button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.quality-reasons { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+.quality-details { margin-top: 0.75rem; }
+.quality-stat-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.25rem 1rem; list-style: none; padding: 0; margin: 0 0 0.75rem; }
+.quality-rejections { border-collapse: collapse; font-size: 0.9rem; }
+.quality-rejections th, .quality-rejections td { border-bottom: 1px solid var(--border); padding: 0.25rem 0.6rem; text-align: left; }
 .house-card {
   display: flex;
   gap: 0.75rem;

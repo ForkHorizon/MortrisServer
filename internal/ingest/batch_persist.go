@@ -132,19 +132,49 @@ func activateInstallation(ctx context.Context, tx pgx.Tx, req *contracts.BatchIn
 	return err
 }
 
-func (s *Service) recordBatchStats(ctx context.Context, req *contracts.BatchIngestRequest, accepted, duplicates, rejected int) error {
-	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO ingestion_stats (project_id, install_id, accepted_count, duplicate_count, rejected_count)
-		VALUES ($1, $2, $3, $4, $5)
-	`, req.ProjectID, req.InstallID, accepted, duplicates, rejected)
-	return err
+type ingestionCounts struct{ accepted, duplicates, rejected int }
+
+func (s *Service) recordBatchStats(ctx context.Context, req *contracts.BatchIngestRequest, prepared []preparedEvent, accepted, duplicates []string, rejected []contracts.RejectedEvent, now time.Time) error {
+	byEvent := make(map[string]contracts.Event, len(prepared))
+	for _, pe := range prepared {
+		byEvent[pe.event.EventID] = pe.event
+	}
+	counts := map[[2]string]ingestionCounts{}
+	add := func(appVersion, buildNumber string, accepted, duplicates, rejected int) {
+		key := [2]string{appVersion, buildNumber}
+		value := counts[key]
+		value.accepted += accepted
+		value.duplicates += duplicates
+		value.rejected += rejected
+		counts[key] = value
+	}
+	for _, eventID := range accepted {
+		event := byEvent[eventID]
+		add(event.AppVersion, event.BuildNumber, 1, 0, 0)
+	}
+	for _, eventID := range duplicates {
+		event := byEvent[eventID]
+		add(event.AppVersion, event.BuildNumber, 0, 1, 0)
+	}
+	for _, rejection := range rejected {
+		add(rejection.AppVersion, rejection.BuildNumber, 0, 0, 1)
+	}
+	for build, value := range counts {
+		if _, err := s.Pool.Exec(ctx, `
+			INSERT INTO ingestion_stats (project_id, install_id, received_at, app_version, build_number, accepted_count, duplicate_count, rejected_count)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		`, req.ProjectID, req.InstallID, now, build[0], build[1], value.accepted, value.duplicates, value.rejected); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // recordRejectionStats aggregates this batch's rejections by (name, code)
 // and upserts day-bucketed counters (section: Phase 4 catalog governance)
 // so the catalog can show which events are failing and how often — the
 // events table itself never stores rejections at all.
-func (s *Service) recordRejectionStats(ctx context.Context, projectID string, rejected []contracts.RejectedEvent, now time.Time) error {
+func (s *Service) recordRejectionStats(ctx context.Context, req *contracts.BatchIngestRequest, rejected []contracts.RejectedEvent, now time.Time) error {
 	if len(rejected) == 0 {
 		return nil
 	}
@@ -152,6 +182,12 @@ func (s *Service) recordRejectionStats(ctx context.Context, projectID string, re
 	counts := map[key]int64{}
 	for _, r := range rejected {
 		counts[key{name: r.Name, code: r.Code}]++
+		if _, err := s.Pool.Exec(ctx, `
+			INSERT INTO event_rejection_occurrences (project_id, install_id, event_id, name, code, app_version, build_number, received_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		`, req.ProjectID, req.InstallID, r.EventID, r.Name, r.Code, r.AppVersion, r.BuildNumber, now); err != nil {
+			return err
+		}
 	}
 	day := now.UTC().Format("2006-01-02")
 	for k, count := range counts {
@@ -160,7 +196,7 @@ func (s *Service) recordRejectionStats(ctx context.Context, projectID string, re
 			VALUES ($1, $2, $3, $4, $5, $6)
 			ON CONFLICT (project_id, name, code, day)
 			DO UPDATE SET count = event_rejection_stats.count + EXCLUDED.count, last_seen_at = EXCLUDED.last_seen_at
-		`, projectID, k.name, k.code, day, count, now); err != nil {
+		`, req.ProjectID, k.name, k.code, day, count, now); err != nil {
 			return err
 		}
 	}

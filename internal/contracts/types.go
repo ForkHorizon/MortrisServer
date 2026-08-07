@@ -88,6 +88,9 @@ type RejectedEvent struct {
 	// even when the client did send a name.
 	Name string `json:"name,omitempty"`
 	Code string `json:"code"`
+	// Internal ingestion metadata; deliberately omitted from the wire response.
+	AppVersion  string `json:"-"`
+	BuildNumber string `json:"-"`
 }
 
 type BatchIngestResponse struct {

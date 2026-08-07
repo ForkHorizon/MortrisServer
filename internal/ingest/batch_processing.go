@@ -99,7 +99,7 @@ func (s *Service) prepareBatch(ctx context.Context, req *contracts.BatchIngestRe
 func (s *Service) prepareEvent(ctx context.Context, projectID string, event contracts.Event, strictCatalog bool, now time.Time, skew time.Duration) (preparedEvent, *contracts.RejectedEvent, *driftObservation, error) {
 	if err := contracts.ValidateEvent(&event); err != nil {
 		ve := err.(*contracts.ValidationError)
-		return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: ve.Code}, nil, nil
+		return preparedEvent{}, &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: ve.Code, AppVersion: event.AppVersion, BuildNumber: event.BuildNumber}, nil, nil
 	}
 	kind := "product"
 	if contracts.ReservedSystemEvents[event.Name] {
@@ -133,14 +133,14 @@ func (s *Service) prepareEvent(ctx context.Context, projectID string, event cont
 // the original strict-name-only behavior for older projects.
 func enforceCatalogStrict(event contracts.Event, allowed map[string]bool, known bool) *contracts.RejectedEvent {
 	if !known {
-		return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeUnknownEvent}
+		return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeUnknownEvent, AppVersion: event.AppVersion, BuildNumber: event.BuildNumber}
 	}
 	if len(allowed) == 0 {
 		return nil
 	}
 	for key := range event.Properties {
 		if !allowed[key] {
-			return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeInvalidPropertyKey}
+			return &contracts.RejectedEvent{EventID: event.EventID, Name: event.Name, Code: contracts.CodeInvalidPropertyKey, AppVersion: event.AppVersion, BuildNumber: event.BuildNumber}
 		}
 	}
 	return nil

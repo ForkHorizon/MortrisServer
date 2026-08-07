@@ -74,10 +74,10 @@ func (s *Service) Batch(ctx context.Context, req *contracts.BatchIngestRequest, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.recordBatchStats(ctx, req, len(accepted), len(duplicates), len(rejected)); err != nil {
+	if err := s.recordBatchStats(ctx, req, prepared, accepted, duplicates, rejected, now); err != nil {
 		return nil, err
 	}
-	if err := s.recordRejectionStats(ctx, req.ProjectID, rejected, now); err != nil {
+	if err := s.recordRejectionStats(ctx, req, rejected, now); err != nil {
 		return nil, err
 	}
 	if err := s.recordDriftStats(ctx, req.ProjectID, drifts, now); err != nil {

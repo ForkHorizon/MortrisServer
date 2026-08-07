@@ -14,6 +14,13 @@ import (
 	"github.com/ForkHorizon/Mortris/internal/apierr"
 )
 
+func puzzleBuild(r *http.Request) *string {
+	if build := r.URL.Query().Get("build"); build != "" {
+		return &build
+	}
+	return nil
+}
+
 func (s *Server) handlePuzzleHouses(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
 	projectID, from, to, err := s.gameplayRange(sess, r)
@@ -21,7 +28,7 @@ func (s *Server) handlePuzzleHouses(w http.ResponseWriter, r *http.Request, sess
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleHouses(r.Context(), s.ReaderPool, projectID, from, to)
+	result, err := analytics.GetPuzzleHouses(r.Context(), s.ReaderPool, projectID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -42,7 +49,7 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	result, err := analytics.GetPuzzleHouse(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -72,7 +79,7 @@ func (s *Server) handlePuzzleDrops(w http.ResponseWriter, r *http.Request, sess 
 		}
 		blockID = &parsed
 	}
-	result, err := analytics.GetPuzzleDrops(r.Context(), s.ReaderPool, projectID, cityID, houseID, blockID, from, to)
+	result, err := analytics.GetPuzzleDrops(r.Context(), s.ReaderPool, projectID, cityID, houseID, blockID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
@@ -140,7 +147,7 @@ func (s *Server) handlePuzzleAttempts(w http.ResponseWriter, r *http.Request, se
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleAttempts(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	result, err := analytics.GetPuzzleAttempts(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

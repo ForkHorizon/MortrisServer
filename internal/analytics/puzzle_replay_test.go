@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -111,5 +112,13 @@ func TestReplayReportsSequenceAndInteractionIntegrity(t *testing.T) {
 	replay := buildReplay("a", raw, testCatalog())
 	if replay.SequenceGaps != 1 || replay.OrphanInteractions != 1 || replay.StateHashMismatches != 1 {
 		t.Fatalf("integrity = gaps:%d orphans:%d hashes:%d", replay.SequenceGaps, replay.OrphanInteractions, replay.StateHashMismatches)
+	}
+}
+
+func TestLoadReplayCatalogRejectsUnknownCurrentRevision(t *testing.T) {
+	pool := testPool(t)
+	projectID := seedProject(t, pool, false)
+	if _, _, err := loadReplayCatalog(context.Background(), pool, projectID, "not-imported", false); err == nil {
+		t.Fatal("schema-v2 revision mismatch must not silently use the newest catalogue")
 	}
 }

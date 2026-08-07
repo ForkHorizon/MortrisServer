@@ -96,6 +96,13 @@ stable. Root cause was `PuzzleAnalyticsContentRevisions.asset` having
 `m_Script: {fileID: 0}` — no script binding, so `Resources.Load` returned
 null silently. Fixed in the working tree, needs a build.
 
+> **Resolved.** Built and proven on a real Android smoke test (see
+> `docs/puzzle-analytics-remaining-plan.md` section 1): production events
+> now carry the imported revision `09f3b91e…` and join correctly. The
+> replay resolver now rejects an unknown schema-v2 revision with a visible
+> `unknown_content_revision` failure. Legacy replay fallback remains
+> available only through an explicit legacy path and carries a warning.
+
 **2. Release positions were world coordinates.** Blocks and targets are
 house-local; each house sits at its own world offset. `alignDrops` in
 `puzzle_drops.go` recovers the offset from placed drops and *refuses to
@@ -103,6 +110,12 @@ draw* when it cannot — two of five played houses currently refuse. Fixed
 client-side in the working tree. **When that build ships, a date range
 spanning old and new data will be bimodal and refuse.** That is correct,
 not a regression; pick a range starting after the build.
+
+> **Resolved.** That build shipped; production events now carry
+> `coordinate_space=house_local` release positions directly, no
+> `alignDrops` offset recovery needed for current data. Negative
+> house-local X/Y are valid coordinates and occurred in the production
+> smoke test — never treat a negative coordinate as missing.
 
 **3. The sample is tiny.** 3 installations, 45 attempts, 153 of 7065
 blocks ever touched, two-thirds of those with ≤2 placements. Everything
@@ -132,6 +145,11 @@ layer. The assembled art is `composite.png`, despite what the catalogue's
 **8. `returned` is a dead outcome.** Declared in the catalogue, no call
 site in the client emits it. Either wire it or drop it; do not build UI
 that implies it exists.
+
+> **Resolved.** Schema v2 wired a distinct `detail_returned` event into
+> the interaction chain (take/release/resolve/return), proven on the
+> production smoke test. It is no longer structurally zero — see
+> `docs/puzzle-analytics-remaining-plan.md` section 1.
 
 ## Verifying locally
 
