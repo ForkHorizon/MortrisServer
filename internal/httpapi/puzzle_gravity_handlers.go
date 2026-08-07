@@ -106,6 +106,11 @@ func (s *Server) handleGameplayDiagnostics(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, requestID, start, err)
 		return
 	}
+	scope, err := analytics.ParseTrafficScope(r.URL.Query())
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
 	timezone := r.URL.Query().Get("timezone")
 	if timezone == "" {
 		timezone = "Europe/Madrid"
@@ -115,7 +120,7 @@ func (s *Server) handleGameplayDiagnostics(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, requestID, start, apierr.New(400, "invalid_request", "invalid timezone: "+timezone))
 		return
 	}
-	result, err := analytics.GetGameplayDiagnostics(r.Context(), s.ReaderPool, projectID, from, to, loc, filter)
+	result, err := analytics.GetGameplayDiagnostics(r.Context(), s.ReaderPool, projectID, from, to, loc, filter, scope)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

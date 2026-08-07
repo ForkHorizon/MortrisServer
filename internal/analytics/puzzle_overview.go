@@ -18,13 +18,13 @@ type PuzzleOverview struct {
 	DataQuality        PuzzleDataQuality   `json:"data_quality"`
 }
 
-func GetPuzzleOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time) (*PuzzleOverview, error) {
-	houses, err := GetPuzzleHouses(ctx, pool, projectID, from, to)
+func GetPuzzleOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, scope TrafficScope) (*PuzzleOverview, error) {
+	houses, err := GetPuzzleHouses(ctx, pool, projectID, from, to, scope)
 	if err != nil {
 		return nil, err
 	}
 	result := summarizePuzzleHouses(houses.Houses)
-	if err := loadPuzzleOverviewEvents(ctx, pool, result, projectID, from, to); err != nil {
+	if err := loadPuzzleOverviewEvents(ctx, pool, result, projectID, from, to, scope); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -50,14 +50,13 @@ func summarizePuzzleHouses(houses []PuzzleHouseSummary) *PuzzleOverview {
 	return result
 }
 
-func loadPuzzleOverviewEvents(ctx context.Context, pool *pgxpool.Pool, result *PuzzleOverview, projectID string, from, to time.Time) error {
+func loadPuzzleOverviewEvents(ctx context.Context, pool *pgxpool.Pool, result *PuzzleOverview, projectID string, from, to time.Time, scope TrafficScope) error {
 	rows, err := pool.Query(ctx, `
 SELECT COALESCE(properties->>'outcome',''), (properties->>'wave_index')::int,
        COUNT(*), COUNT(*) FILTER (WHERE properties->>'outcome' LIKE 'fell_%')
 FROM events WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3
   AND name='placement_resolved'
-  AND COALESCE(properties->>'origin','player')='player'
-  AND COALESCE(properties->>'progress_origin','natural')='natural'
+  AND `+scope.eventPredicate()+`
 GROUP BY 1,2`, projectID, from, to)
 	if err != nil {
 		return err
