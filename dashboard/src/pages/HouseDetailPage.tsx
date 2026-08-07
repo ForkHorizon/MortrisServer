@@ -1,10 +1,11 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { PuzzleDropMap, PuzzleHouseDetail } from '../api/houseTypes'
+import type { PuzzleDropMap, PuzzleHouseDetail, PuzzleQuality } from '../api/houseTypes'
 import { useAuth } from '../auth/useAuth'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
+import { QualityBanner } from '../components/QualityBanner'
 import { HouseBody } from './houseDetailParts'
 import { useHouseControls } from './useHouseControls'
 import { useApiData } from '../hooks/useApiData'
@@ -45,6 +46,9 @@ export function HouseDetailPage() {
   const { from, to } = range.params
   const view = useHouseControls()
   const { detail, dropMap } = useHouseView({ project: currentProject, city, house, from, to, selected: view.selected, showDrops: view.showDrops })
+  const [build, setBuild] = useState('')
+  const fetchQuality = useCallback(() => apiGet<PuzzleQuality>('/api/v1/analytics/gameplay/quality', { project: currentProject, from, to, build: build || undefined }), [currentProject, from, to, build])
+  const quality = useApiData(fetchQuality, `puzzle-quality:${currentProject}:${from}:${to}:${build}`)
 
   if (!currentProject) return <p>Select a project to inspect a house.</p>
   return (
@@ -53,6 +57,7 @@ export function HouseDetailPage() {
       <h1 id="house-heading">{detail.data?.display_label || `House ${house}`}</h1>
       <DateRangeFields range={range} />
       <Freshness loading={detail.loading} error={detail.error} stale={detail.stale} updatedAt={detail.updatedAt} />
+      <QualityBanner quality={quality.data} build={build} onBuildChange={setBuild} />
       {detail.data && (
         <HouseBody
           detail={detail.data}

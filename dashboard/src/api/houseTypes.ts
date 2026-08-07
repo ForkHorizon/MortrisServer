@@ -171,3 +171,73 @@ export interface PuzzleAttemptSummary {
 export interface PuzzleAttemptList {
   attempts: PuzzleAttemptSummary[]
 }
+
+// Stage 2 data-quality control plane (docs/puzzle-analytics-remaining-plan.md
+// section 5) — mirrors internal/analytics/puzzle_quality.go's PuzzleQuality.
+export interface PuzzleQualityRejection {
+  name: string
+  code: string
+  count: number
+}
+
+export interface PuzzleQualityDelay {
+  samples: number
+  p50_ms: number
+  p90_ms: number
+  p99_ms: number
+  max_ms: number
+}
+
+export interface PuzzleQualityBuild {
+  app_version: string
+  build_number: string
+  events: number
+}
+
+export type PuzzleQualityStatus = 'grey' | 'green' | 'amber' | 'red'
+
+export interface PuzzleQuality {
+  received_events: number
+  accepted_events: number
+  duplicate_events: number
+  rejected_events: number
+  rejections: PuzzleQualityRejection[]
+
+  total_gameplay_events: number
+  schema_v2_events: number
+  missing_schema_version_events: number
+
+  unknown_revision_events: number
+  invalid_coordinate_space_events: number
+
+  distinct_installs: number
+  distinct_sessions: number
+  distinct_house_runs: number
+  distinct_wave_attempts: number
+  distinct_interactions: number
+
+  sequence_gaps: number
+  sequence_duplicates: number
+  house_event_index_gaps: number
+  house_event_index_duplicates: number
+  attempt_event_index_gaps: number
+  attempt_event_index_duplicates: number
+
+  orphan_interactions: number
+  checkpoint_mismatches: number
+  recovered_attempts: number
+
+  open_house_runs_recent: number
+  open_house_runs_stale: number
+  open_attempts_recent: number
+  open_attempts_stale: number
+
+  unpaired_developer_commands: number
+  unpaired_developer_mutations: number
+
+  delivery_delay_ms: PuzzleQualityDelay
+  builds: PuzzleQualityBuild[]
+
+  status: PuzzleQualityStatus
+  status_reasons: string[]
+}

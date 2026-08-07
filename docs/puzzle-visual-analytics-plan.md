@@ -420,6 +420,12 @@ and distinct from a fall — or drop it from the docs. Until then the page
 must not show a "changed their mind" category that is structurally
 always zero.
 
+> **Resolved (schema v2, see `docs/puzzle-analytics-remaining-plan.md`
+> section 1).** The client now emits a distinct `detail_returned` event
+> as part of the take/release/resolve/return interaction chain, separate
+> from `placement_resolved`'s `returned` outcome. A "changed their mind"
+> category is no longer structurally zero.
+
 ### The sample is thin, and the design has to say so
 
 Per `(house, block)` placement counts:
@@ -465,6 +471,14 @@ map can say, and the second one quietly weakens the revision guarantee.
 
 ### Release positions are in world space
 
+> **Resolved (schema v2, see `docs/puzzle-analytics-remaining-plan.md`
+> section 1).** `CheckTruePositionService.ToHouseSpace` shipped and was
+> proven on a real Android build: release positions now arrive in
+> `house_local` coordinates with `coordinate_space` set accordingly. The
+> `alignDrops` offset-recovery workaround below is historical — current
+> builds need no correction, and negative house-local X/Y are valid
+> coordinates, not a missing-value signal.
+
 `CheckTruePositionService` sends `blockTransform.position`, a world
 coordinate, while blocks and targets are house-local. Each house sits at
 its own world offset, so the two frames differ by a constant per house.
@@ -492,6 +506,16 @@ behaviour rather than a regression — pick a range starting after the
 build, and ranges after the cutover need no correction at all.
 
 ### No event references an imported content revision
+
+> **Resolved (schema v2, see `docs/puzzle-analytics-remaining-plan.md`
+> section 1).** `PuzzleAnalyticsContentRevisions.asset` now deserializes
+> correctly and the production smoke build sent the imported revision
+> `09f3b91e4e45313f973b3264536f62277bb22d414453a6e6f5a25c6e3211f23e`,
+> proven joinable on real Android traffic. `loadReplayCatalog`'s silent
+> fallback to the newest revision below is still in place for legacy data
+> and is exactly the workaround Stage 2 (section 5, "Revision fallback
+> decision") plans to retire for current builds — see that section before
+> changing it.
 
 All 936 events carry per-house revisions produced by the client's local
 JSON-hash fallback (`Sha256(content.DataJson.text)`), 18 distinct values,

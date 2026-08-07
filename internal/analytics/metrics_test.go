@@ -78,6 +78,11 @@ type seedEvent struct {
 	BuildNumber      string
 	Platform         string
 	Properties       map[string]any
+	// SentAtClient/ReceivedAt default to EffectiveAt when zero. Only the
+	// delivery-delay quality test (received_at - sent_at_client) needs
+	// them to differ.
+	SentAtClient time.Time
+	ReceivedAt   time.Time
 }
 
 func seedEvents(t *testing.T, pool *pgxpool.Pool, projectID string, events []seedEvent) {
@@ -91,6 +96,12 @@ func seedEvents(t *testing.T, pool *pgxpool.Pool, projectID string, events []see
 		if e.Platform == "" {
 			e.Platform = "android"
 		}
+		if e.SentAtClient.IsZero() {
+			e.SentAtClient = e.EffectiveAt
+		}
+		if e.ReceivedAt.IsZero() {
+			e.ReceivedAt = e.EffectiveAt
+		}
 		if _, err := pool.Exec(ctx, `
 			INSERT INTO events (
 				project_id, event_id, install_id, session_id, sequence, session_elapsed_ms,
@@ -98,11 +109,12 @@ func seedEvents(t *testing.T, pool *pgxpool.Pool, projectID string, events []see
 				clock_skew_ms, time_quality, app_version, build_number, platform, os_version,
 				device_class, locale, timezone_offset_minutes, properties
 			) VALUES (
-				$1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$9,$9,0,'client',$10,$11,$12,'','','',0,$13
+				$1,$2,$3,$4,$5,$6,$7,$8,$9,$14,$15,$9,0,'client',$10,$11,$12,'','','',0,$13
 			)
 			ON CONFLICT (project_id, event_id) DO NOTHING
 		`, projectID, e.EventID, e.InstallID, e.SessionID, e.Sequence, e.SessionElapsedMs,
-			e.Name, e.Kind, e.EffectiveAt, e.AppVersion, e.BuildNumber, e.Platform, props); err != nil {
+			e.Name, e.Kind, e.EffectiveAt, e.AppVersion, e.BuildNumber, e.Platform, props,
+			e.SentAtClient, e.ReceivedAt); err != nil {
 			t.Fatalf("seed event %s: %v", e.EventID, err)
 		}
 	}
