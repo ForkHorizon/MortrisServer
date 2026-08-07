@@ -471,6 +471,15 @@ th {
 /* Stage 3 traffic segmentation (section 6). */
 .traffic-scope-select { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: var(--text-muted); margin: 0.5rem 0; }
 .tester-impact-panel { margin: 1rem 0; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
+
+/* Stage 4 wave staircase (section 7). */
+.staircase-steps { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.staircase-step { display: flex; flex-direction: column; gap: 0.15rem; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0.3rem 0.5rem; cursor: pointer; color: inherit; font: inherit; }
+.staircase-step:hover, .staircase-step[aria-pressed="true"] { border-color: var(--accent); background: var(--bg-alt); }
+.staircase-label { font-size: 0.9rem; }
+.staircase-bar-track { display: block; height: 0.6rem; border-radius: 4px; background: var(--border); overflow: hidden; }
+.staircase-bar { display: block; height: 100%; background: var(--accent); border-radius: 4px 0 0 4px; }
+.staircase-drop { font-size: 0.8rem; }
 .house-card {
   display: flex;
   gap: 0.75rem;

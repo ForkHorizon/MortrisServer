@@ -51,6 +51,29 @@ func (s *Server) handlePuzzleHouseDetail(w http.ResponseWriter, r *http.Request,
 	s.logRequest(r, requestID, http.StatusOK, start, nil)
 }
 
+// handlePuzzleWaveFunnel is Stage 4's wave staircase (docs/puzzle-analytics-remaining-plan.md
+// section 7).
+func (s *Server) handlePuzzleWaveFunnel(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
+	requestID, start := newRequestID(), time.Now()
+	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	cityID, houseID, err := pathCityHouse(r)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	result, err := analytics.GetPuzzleWaveFunnel(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to, scope)
+	if err != nil {
+		s.fail(w, r, requestID, start, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+	s.logRequest(r, requestID, http.StatusOK, start, nil)
+}
+
 func (s *Server) handlePuzzleDrops(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
 	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)

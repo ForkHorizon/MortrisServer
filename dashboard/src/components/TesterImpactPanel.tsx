@@ -1,4 +1,4 @@
-import type { PuzzleTesterImpact } from '../api/houseTypes'
+import type { PuzzleTesterImpact } from '../api/puzzleQualityTypes'
 import { StatGrid, StatTile } from './StatTile'
 
 // Stage 3's "compact tester-impact summary" (docs/puzzle-analytics-remaining-plan.md

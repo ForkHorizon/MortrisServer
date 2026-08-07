@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import type { ArtMode } from '../components/HouseCanvas'
 import type { PuzzleDrop, PuzzleDropMap, PuzzleHouseBlock, PuzzleHouseDetail } from '../api/houseTypes'
+import type { PuzzleWaveFunnel } from '../api/puzzleQualityTypes'
 import type { HouseControls } from './useHouseControls'
 import { AttemptPicker } from '../components/AttemptPicker'
 import { HouseCanvas } from '../components/HouseCanvas'
 import { outcomeWords, paintFor, ruleSentence, supportColor, supportGroupLabel } from '../components/houseColors'
 import { HOUSE_METRICS, type HouseMetric, metricReading, metricTitle } from '../components/houseMetrics'
 import { StatGrid, StatTile } from '../components/StatTile'
+import { WaveStaircase } from '../components/WaveStaircase'
 import { DropNote, houseVerdict } from './houseDetailText'
 
 // The pieces of the house detail view. Split out of HouseDetailPage.tsx
@@ -200,17 +202,33 @@ type AttemptsProps = {
   to: string
   blocks: PuzzleHouseBlock[]
   label: string
+  waveIndex?: number | null
 }
 
 export function AttemptsSection(p: AttemptsProps) {
   return (
-    <details className="attempts">
+    <details className="attempts" open={p.waveIndex != null}>
       <summary>Watch one attempt play out</summary>
       <p className="muted">
         Step through what one player actually did: grey is already standing, amber is the detail in their hand, red is
         what it was waiting on.
       </p>
       <AttemptPicker {...p} />
+    </details>
+  )
+}
+
+type WaveFunnelSectionProps = {
+  funnel: PuzzleWaveFunnel | null
+  wave: number | null
+  onWave: (w: number) => void
+}
+
+export function WaveFunnelSection({ funnel, wave, onWave }: WaveFunnelSectionProps) {
+  return (
+    <details className="wave-funnel-section" open>
+      <summary>Where natural players stop</summary>
+      <WaveStaircase funnel={funnel} selectedWave={wave} onSelectWave={onWave} />
     </details>
   )
 }
@@ -225,9 +243,10 @@ type BodyProps = {
   to: string
   view: HouseControls
   dropMap: PuzzleDropMap | null | undefined
+  waveFunnel: PuzzleWaveFunnel | null
 }
 
-export function HouseBody({ detail, project, city, house, from, to, view, dropMap }: BodyProps) {
+export function HouseBody({ detail, project, city, house, from, to, view, dropMap, waveFunnel }: BodyProps) {
   const blocks = detail.blocks
   const label = detail.display_label || `House ${house}`
   const worst = [...blocks].filter((b) => b.rate_is_reliable && !b.is_ground).sort((a, b) => b.fall_rate - a.fall_rate)[0]
@@ -265,7 +284,8 @@ export function HouseBody({ detail, project, city, house, from, to, view, dropMa
         showSupport={view.showSupport}
         metric={view.metric}
       />
-      <AttemptsSection project={project} city={city} house={house} from={from} to={to} blocks={blocks} label={label} />
+      <WaveFunnelSection funnel={waveFunnel} wave={view.wave} onWave={view.setWave} />
+      <AttemptsSection project={project} city={city} house={house} from={from} to={to} blocks={blocks} label={label} waveIndex={view.wave} />
     </>
   )
 }

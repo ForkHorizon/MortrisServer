@@ -49,7 +49,11 @@ SELECT
              AND COALESCE(properties->>'progress_origin', 'natural') = 'natural') AS fully_natural,
     BOOL_OR(name = 'house_completed') AS completed,
     MIN(effective_at) AS first_event_at,
-    MAX(effective_at) AS last_event_at
+    MAX(effective_at) AS last_event_at,
+    -- Stage 4 house-coverage view (section 7) shows "last natural play
+    -- build" per house; ordering by effective_at picks the build of this
+    -- run's most recent event, not an arbitrary aggregation order.
+    (array_agg(build_number ORDER BY effective_at DESC))[1] AS last_build_number
 FROM events
 WHERE properties ? 'house_run_id'
 GROUP BY 1, 2;
