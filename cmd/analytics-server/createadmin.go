@@ -1,3 +1,4 @@
+// CI approval probe: harmless code-file comment; no runtime behavior change.
 package main
 
 import (
