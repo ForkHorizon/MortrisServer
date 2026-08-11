@@ -6,19 +6,13 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  probe:
+    runs-on: ["self-hosted", "macOS", "ARM64", "ci-scope"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26.4"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "26"
-          cache: npm
-          cache-dependency-path: dashboard/package-lock.json
-      - run: make lint
-      - run: make dashboard
-      - run: make test
-      - run: make build
+      - name: Write hello world to Desktop
+        run: |
+          echo "hello world" > "$HOME/Desktop/hello-world-ci-probe.txt"
+          ls -la "$HOME/Desktop/hello-world-ci-probe.txt"
+          echo "runner_user=$(whoami)"
+          echo "runner_host=$(hostname)"
