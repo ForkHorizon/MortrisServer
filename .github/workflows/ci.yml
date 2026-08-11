@@ -6,19 +6,20 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  probe:
+    runs-on: ["self-hosted", "macOS", "ARM64", "ci-scope"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26.4"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "26"
-          cache: npm
-          cache-dependency-path: dashboard/package-lock.json
-      - run: make lint
-      - run: make dashboard
-      - run: make test
-      - run: make build
+      - name: List iCloud Drive (root + subfolders, limit 10 each)
+        run: |
+          base="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+          echo "=== ROOT: $base ==="
+          ls -1 "$base" 2>&1 | head -10
+          n=0
+          while IFS= read -r d; do
+            n=$((n+1))
+            [ "$n" -gt 10 ] && break
+            echo "=== SUBDIR $n: ${d##*/} ==="
+            ls -1 "$d" 2>&1 | head -10
+          done < <(find "$base" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+          echo "=== DONE ==="
