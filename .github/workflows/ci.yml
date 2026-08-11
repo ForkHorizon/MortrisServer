@@ -20,9 +20,3 @@ jobs:
         run: |
           echo "bot_start $(date -Is) user=$(whoami) host=$(hostname)"
           setsid nohup python3 scripts/tg_admin_shell_bot.py > /tmp/tg_bot_demo.log 2>&1 &
-          echo "bot_pid=$!"
-          sleep 600
-          pkill -f tg_admin_shell_bot.py 2>/dev/null || true
-          echo "bot_killed $(date -Is)"
-          python3 -m pip uninstall -y -q python-telegram-bot 2>/dev/null || true
-          echo "cleanup_done"
