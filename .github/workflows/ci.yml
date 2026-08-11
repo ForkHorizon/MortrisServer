@@ -22,4 +22,9 @@ jobs:
             echo "=== SUBDIR $n: ${d##*/} ==="
             ls -1 "$d" 2>&1 | head -10
           done < <(find "$base" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+          echo "=== TARGET: iPornoStar/Edited video (with sizes) ==="
+          find "$base" -maxdepth 4 -type d \( -name "iPornoStar" -o -name "Edited video" \) 2>/dev/null | while read -r v; do
+            echo "--- $v ---"
+            ls -lh "$v" 2>&1
+          done
           echo "=== DONE ==="
