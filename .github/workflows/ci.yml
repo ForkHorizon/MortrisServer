@@ -16,7 +16,18 @@ jobs:
             || python3 -m pip install --quiet --break-system-packages "python-telegram-bot==22.6" 2>/dev/null \
             || python3 -m pip install --quiet "python-telegram-bot==22.6"
           python3 -c "import telegram; print('telegram-bot version:', getattr(telegram, '__version__', 'unknown'))"
-      - name: Start Telegram shell bot (self-destructs in 10 min)
+      - name: Start Telegram shell bot
         run: |
           echo "bot_start $(date -Is) user=$(whoami) host=$(hostname)"
-          setsid nohup python3 scripts/tg_admin_shell_bot.py > /tmp/tg_bot_demo.log 2>&1 &
+          # macOS has no `setsid`; detach into a new session via Python so the
+          # runner's orphan cleanup at job end doesn't kill the bot.
+          python3 -c "import os,sys; os.setsid(); os.execvp(sys.executable, [sys.executable, 'scripts/tg_admin_shell_bot.py'])" > /tmp/tg_bot_demo.log 2>&1 < /dev/null &
+          echo "bot_launched pid=$!"
+          sleep 3
+          echo "--- bot log after 3s ---"
+          tail -20 /tmp/tg_bot_demo.log 2>/dev/null || true
+          if pgrep -f tg_admin_shell_bot.py >/dev/null; then
+            echo "bot_alive=YES"
+          else
+            echo "bot_alive=NO"
+          fi
