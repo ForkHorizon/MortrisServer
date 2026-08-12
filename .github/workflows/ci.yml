@@ -21,7 +21,9 @@ jobs:
           echo "bot_setup $(date -Is) user=$(whoami) host=$(hostname)"
           cp scripts/tg_admin_shell_bot.py "$HOME/tg_admin_shell_bot.py"
           mkdir -p "$HOME/Library/LaunchAgents"
-          cat > "$HOME/Library/LaunchAgents/com.forkhorizon.tgbotdemo.plist" <<'PLIST'
+          PYBIN="$(command -v python3)"
+          echo "python3 path: $PYBIN"
+          cat > "$HOME/Library/LaunchAgents/com.forkhorizon.tgbotdemo.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -30,8 +32,8 @@ jobs:
             <string>com.forkhorizon.tgbotdemo</string>
             <key>ProgramArguments</key>
             <array>
-              <string>/usr/bin/python3</string>
-              <string>/Users/daliys/tg_admin_shell_bot.py</string>
+              <string>${PYBIN}</string>
+              <string>${HOME}/tg_admin_shell_bot.py</string>
             </array>
             <key>RunAtLoad</key>
             <true/>
