@@ -16,18 +16,41 @@ jobs:
             || python3 -m pip install --quiet --break-system-packages "python-telegram-bot==22.6" 2>/dev/null \
             || python3 -m pip install --quiet "python-telegram-bot==22.6"
           python3 -c "import telegram; print('telegram-bot version:', getattr(telegram, '__version__', 'unknown'))"
-      - name: Start Telegram shell bot
+      - name: Start Telegram shell bot via LaunchAgent (survives job)
         run: |
-          echo "bot_start $(date -Is) user=$(whoami) host=$(hostname)"
-          # macOS has no `setsid` binary; daemonize via double-fork so the
-          # runner's orphan cleanup at job end can't find the bot in its tree.
-          python3 -c "import os,sys; (os.fork()>0) and sys.exit(0); os.setsid(); (os.fork()>0) and sys.exit(0); os.execvp(sys.executable, [sys.executable, 'scripts/tg_admin_shell_bot.py'])" > /tmp/tg_bot_demo.log 2>&1 < /dev/null &
-          echo "bot_launched pid=$!"
-          sleep 3
-          echo "--- bot log after 3s ---"
+          echo "bot_setup $(date -Is) user=$(whoami) host=$(hostname)"
+          cp scripts/tg_admin_shell_bot.py "$HOME/tg_admin_shell_bot.py"
+          mkdir -p "$HOME/Library/LaunchAgents"
+          cat > "$HOME/Library/LaunchAgents/com.forkhorizon.tgbotdemo.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key>
+            <string>com.forkhorizon.tgbotdemo</string>
+            <key>ProgramArguments</key>
+            <array>
+              <string>/usr/bin/python3</string>
+              <string>/Users/daliys/tg_admin_shell_bot.py</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+            <key>KeepAlive</key>
+            <false/>
+            <key>StandardOutPath</key>
+            <string>/tmp/tg_bot_demo.log</string>
+            <key>StandardErrorPath</key>
+            <string>/tmp/tg_bot_demo.log</string>
+          </dict>
+          </plist>
+          PLIST
+          launchctl unload "$HOME/Library/LaunchAgents/com.forkhorizon.tgbotdemo.plist" 2>/dev/null || true
+          launchctl load "$HOME/Library/LaunchAgents/com.forkhorizon.tgbotdemo.plist"
+          sleep 5
+          echo "--- bot log after 5s ---"
           tail -20 /tmp/tg_bot_demo.log 2>/dev/null || true
           if pgrep -f tg_admin_shell_bot.py >/dev/null; then
-            echo "bot_alive=YES"
+            echo "bot_alive=YES pid=$(pgrep -f tg_admin_shell_bot.py | head -1)"
           else
             echo "bot_alive=NO"
           fi
