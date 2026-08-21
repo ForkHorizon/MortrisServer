@@ -19,7 +19,8 @@ jobs:
   go-quality-gate:
     uses: ForkHorizon/ci-gates/.github/workflows/go-quality.yml@main
     with:
-      runs-on: '["self-hosted", "macOS", "ARM64", "ci-scope"]'
+      gates-ref: main
+      runs-on: '["self-hosted", "macOS", "ARM64", "ci-scope", "ci-scope-v2"]'
       # dashboard/embed.go's go:embed target needs at least one file present
       # to compile at all on a fresh checkout — see the same rule in Makefile.
       bootstrap-command: "mkdir -p dashboard/dist && printf '<!doctype html><title>Mortris</title><body>dashboard not built yet — run `make dashboard`</body>' > dashboard/dist/index.html"
