@@ -30,4 +30,5 @@ jobs:
     with:
       mode: ${{ inputs.mode || 'auto' }}
       config: .code-linter.json
-      runs-on: '["self-hosted", "macOS", "ARM64", "ci-scope"]'
+      gates-ref: main
+      runs-on: '["self-hosted", "macOS", "ARM64", "ci-scope", "ci-scope-v2"]'
