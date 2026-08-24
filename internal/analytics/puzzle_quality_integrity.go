@@ -120,7 +120,7 @@ func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *P
 			return err
 		}
 		terminal := placed || hasReturn || hasAbandoned
-		if !(hasTake && hasRelease && hasResolution && terminal) {
+		if !hasTake || !hasRelease || !hasResolution || !terminal {
 			orphans++
 		}
 	}

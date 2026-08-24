@@ -146,14 +146,6 @@ func bestEffortEventID(raw json.RawMessage) string {
 	return probe.EventID
 }
 
-func bestEffortName(raw json.RawMessage) string {
-	var probe struct {
-		Name string `json:"name"`
-	}
-	_ = json.Unmarshal(raw, &probe)
-	return probe.Name
-}
-
 func bestEffortRejectedEvent(raw json.RawMessage, code string) RejectedEvent {
 	var probe struct {
 		EventID     string `json:"event_id"`
