@@ -136,7 +136,7 @@ one silently drops the rest. See `deploy/nginx/houseart.conf`'s header.
 `.go`, `.ts`, `.tsx`, `.py`. Several files here were split for exactly
 this reason. Four pre-existing violations elsewhere in the repo are not
 yours (`deploy/loadtest`, `funnel.go`, `policyprobe.go`). Run:
-`python3 <path>/linter-checker-300-lines.py --config .linter-checker-300-lines.json`
+`python3 <path>/linter.py --config .code-linter.json`
 
 **7. `static_packed.png` is not the house.** It is the window/lights
 layer. The assembled art is `composite.png`, despite what the catalogue's
