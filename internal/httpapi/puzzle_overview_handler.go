@@ -10,12 +10,12 @@ import (
 
 func (s *Server) handlePuzzleOverview(w http.ResponseWriter, r *http.Request, sess *adminauth.Session) {
 	requestID, start := newRequestID(), time.Now()
-	projectID, from, to, err := s.gameplayRange(sess, r)
+	projectID, from, to, scope, err := s.gameplayRangeAndScope(sess, r)
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleOverview(r.Context(), s.ReaderPool, projectID, from, to, puzzleBuild(r))
+	result, err := analytics.GetPuzzleOverview(r.Context(), s.ReaderPool, projectID, from, to, scope, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

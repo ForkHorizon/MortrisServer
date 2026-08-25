@@ -19,6 +19,7 @@ func (s *Server) registerAnalyticsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/players", s.requireSession(s.handleGameplayPlayers))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/overview", s.requireSession(s.handlePuzzleOverview))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/quality", s.requireSession(s.handlePuzzleQuality))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/tester-impact", s.requireSession(s.handlePuzzleTesterImpact))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/attempts/{id}", s.requireSession(s.handleGameplayAttempt))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/houses", s.requireSession(s.handlePuzzleHouses))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/houses/{city}/{house}", s.requireSession(s.handlePuzzleHouseDetail))

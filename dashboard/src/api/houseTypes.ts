@@ -245,3 +245,27 @@ export interface PuzzleQuality {
   status: PuzzleQualityStatus
   status_reasons: string[]
 }
+
+// Stage 3 traffic segmentation (docs/puzzle-analytics-remaining-plan.md
+// section 6) — mirrors internal/analytics/puzzle_traffic.go's TrafficScope
+// and internal/analytics/puzzle_tester_impact.go's PuzzleTesterImpact.
+export type TrafficScope = 'natural_only' | 'developer_affected' | 'all'
+
+export interface PuzzleTesterCommandCount {
+  command: string
+  result: string
+  count: number
+}
+
+export interface PuzzleTesterImpact {
+  developer_actions: number
+  affected_house_runs: number
+  affected_attempts: number
+  commands: PuzzleTesterCommandCount[]
+  resets: number
+  progress_completions: number
+  failures: number
+  noops: number
+  mutations_with_before_after: number
+  mutations_missing_before_after: number
+}

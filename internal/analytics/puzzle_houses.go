@@ -59,7 +59,14 @@ func latestPuzzleRevision(ctx context.Context, pool *pgxpool.Pool, projectID str
 // outcomes, including houses nobody has opened — "nobody has played this"
 // is itself a finding, and hiding untouched houses would make the wall
 // silently describe only the corner of the game that happens to have data.
-func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build ...*string) (*PuzzleHouseList, error) {
+//
+// scope splits at two granularities (Stage 3, docs/puzzle-analytics-remaining-plan.md
+// section 6): placements/falls/hints/played-detail-count are placement-
+// quality metrics and stay event-level; attempts/completed_attempts/
+// unique_installations answer "did this house get played/finished," so
+// they're gated on the whole wave attempt being in scope, via
+// puzzle_wave_attempt_classification, not just the surviving event rows.
+func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, scope TrafficScope, build ...*string) (*PuzzleHouseList, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	revision, err := latestPuzzleRevision(ctx, pool, projectID)
@@ -67,7 +74,7 @@ func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 		return nil, err
 	}
 	result := &PuzzleHouseList{ContentRevision: revision, Houses: []PuzzleHouseSummary{}}
-	rows, err := pool.Query(ctx, puzzleHousesQuery, projectID, revision, from, to, optionalBuild(build))
+	rows, err := pool.Query(ctx, puzzleHousesQuery(scope), projectID, revision, from, to, optionalBuild(build))
 	if err != nil {
 		return nil, err
 	}
@@ -92,32 +99,51 @@ func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 // The catalogue is the spine of this query, not the events, so untouched
 // houses survive the join. display_label lives only inside the stored
 // catalogue document, hence the jsonb path lookup per house.
-const puzzleHousesQuery = `
+//
+// scope is spliced in as one of three fixed literals (TrafficScope.
+// eventPredicate/runPredicate), never raw input — see puzzle_traffic.go.
+// Split into two functions/a const purely to stay under the repo's
+// 50-line function gate; puzzleHousesCTEs and puzzleHousesSelect are not
+// meant to be read as independent queries.
+func puzzleHousesQuery(scope TrafficScope) string {
+	return puzzleHousesCTEs(scope) + puzzleHousesSelect
+}
+
+func puzzleHousesCTEs(scope TrafficScope) string {
+	return `
 WITH house AS (
     SELECT city_id, house_id,
            bool_or(bounds_min_x_milli IS NOT NULL) has_geometry
     FROM puzzle_content_blocks
     WHERE project_id=$1 AND content_revision=$2
     GROUP BY 1,2
+), eligible_attempts AS (
+    SELECT attempt_id FROM puzzle_wave_attempt_classification
+    WHERE project_id=$1 AND last_event_at>=$3 AND last_event_at<$4 AND ` + scope.runPredicate("fully_natural") + `
 ), ev AS (
     SELECT (properties->>'city_id')::int city_id,
            (properties->>'house_id')::int house_id,
            name, properties, install_id
     FROM events
-	WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
-	  AND ($5::text IS NULL OR build_number=$5)
+    WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
+      AND ($5::text IS NULL OR build_number=$5)
       AND properties ? 'house_id' AND properties ? 'attempt_id'
-      AND COALESCE(properties->>'origin','player')='player'
-      AND COALESCE(properties->>'progress_origin','natural')='natural'
-), agg AS (
+      AND ` + scope.eventPredicate() + `
+), attempt_agg AS (
+    -- Attempts/completions need the whole attempt in scope (plan section 6).
     SELECT city_id, house_id,
            COUNT(DISTINCT properties->>'attempt_id') attempts,
-		   COUNT(DISTINCT properties->>'attempt_id') FILTER (WHERE name='house_completed') completed_attempts,
-		   COUNT(DISTINCT install_id) unique_installations,
+           COUNT(DISTINCT properties->>'attempt_id') FILTER (WHERE name='house_completed') completed_attempts,
+           COUNT(DISTINCT install_id) unique_installations
+    FROM ev WHERE properties->>'attempt_id' IN (SELECT attempt_id FROM eligible_attempts)
+    GROUP BY 1,2
+), metric_agg AS (
+    -- Placement-quality metrics stay event-level (plan section 6, rule 1).
+    SELECT city_id, house_id,
            COUNT(*) FILTER (WHERE name='placement_resolved') placements,
            COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%') falls,
            COUNT(*) FILTER (WHERE name='hint_used') hints,
-		   COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'), '') dominant_failure
+           COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'), '') dominant_failure
     FROM ev GROUP BY 1,2
 ), detail_counts AS (
 	SELECT city_id, house_id, COUNT(*) played_details,
@@ -129,6 +155,10 @@ WITH house AS (
 	) blocks
 	GROUP BY 1,2
 )
+`
+}
+
+const puzzleHousesSelect = `
 SELECT h.city_id, h.house_id,
        COALESCE(jsonb_path_query_first(r.catalog,
            ('$.cities[*] ? (@.city_id == ' || h.city_id || ').houses[*] ? (@.house_id == ' || h.house_id || ').display_label')::jsonpath
@@ -136,13 +166,14 @@ SELECT h.city_id, h.house_id,
        h.has_geometry,
 	       EXISTS(SELECT 1 FROM puzzle_house_art art WHERE art.project_id=$1 AND art.content_revision=$2 AND art.city_id=h.city_id AND art.house_id=h.house_id) has_art,
        COALESCE(a.attempts,0), COALESCE(a.completed_attempts,0), COALESCE(a.unique_installations,0),
-	   COALESCE(d.played_details,0), COALESCE(d.reliable_details,0), COALESCE(a.dominant_failure,''),
-	   COALESCE(a.placements,0), COALESCE(a.falls,0), COALESCE(a.hints,0)
+	   COALESCE(d.played_details,0), COALESCE(d.reliable_details,0), COALESCE(m.dominant_failure,''),
+	   COALESCE(m.placements,0), COALESCE(m.falls,0), COALESCE(m.hints,0)
 FROM house h
 JOIN puzzle_content_revisions r ON r.project_id=$1 AND r.content_revision=$2
-LEFT JOIN agg a ON a.city_id=h.city_id AND a.house_id=h.house_id
+LEFT JOIN attempt_agg a ON a.city_id=h.city_id AND a.house_id=h.house_id
+LEFT JOIN metric_agg m ON m.city_id=h.city_id AND m.house_id=h.house_id
 LEFT JOIN detail_counts d ON d.city_id=h.city_id AND d.house_id=h.house_id
-ORDER BY COALESCE(a.placements,0) DESC, h.city_id, h.house_id`
+ORDER BY COALESCE(m.placements,0) DESC, h.city_id, h.house_id`
 
 func optionalBuild(build []*string) *string {
 	if len(build) == 0 {
