@@ -7,11 +7,14 @@ import { ReplayPlayer } from './ReplayPlayer'
 import { Timestamp } from './Timestamp'
 import { outcomeWords } from './houseColors'
 
-type Props = { project: string; city: string; house: string; from: string; to: string; build?: string; blocks: PuzzleHouseBlock[]; label: string }
+type Props = { project: string; city: string; house: string; from: string; to: string; build?: string; blocks: PuzzleHouseBlock[]; label: string; waveIndex?: number | null }
 
 // Attempts are listed worst-first rather than newest-first: the reason to
-// open a replay is almost always "show me one that went badly".
-export function AttemptPicker({ project, city, house, from, to, build, blocks, label }: Props) {
+// open a replay is almost always "show me one that went badly". waveIndex,
+// when set (via the wave tabs or a wave-staircase step — plan section 7,
+// "clicking a step should filter the attempt/run examples below it"),
+// narrows the list to attempts of that one wave.
+export function AttemptPicker({ project, city, house, from, to, build, blocks, label, waveIndex }: Props) {
   const [selected, setSelected] = useState('')
   const fetchAttempts = useCallback(
     () => apiGet<PuzzleAttemptList>(`/api/v1/analytics/gameplay/houses/${city}/${house}/attempts`, { project, from, to, build: build || undefined }),
@@ -24,8 +27,9 @@ export function AttemptPicker({ project, city, house, from, to, build, blocks, l
   )
   const replay = useApiData<PuzzleReplay | null>(fetchReplay, `puzzle-replay:${project}:${selected}`)
 
-  const rows = [...(attempts.data?.attempts ?? [])].sort((a, b) => b.falls - a.falls || b.active_duration_ms - a.active_duration_ms)
-  if (rows.length === 0) return <p className="muted">No attempts on this house in this range.</p>
+  const scoped = waveIndex != null ? (attempts.data?.attempts ?? []).filter((row) => row.wave_index === waveIndex) : (attempts.data?.attempts ?? [])
+  const rows = [...scoped].sort((a, b) => b.falls - a.falls || b.active_duration_ms - a.active_duration_ms)
+  if (rows.length === 0) return <p className="muted">{waveIndex != null ? `No attempts on wave ${waveIndex + 1} in this range.` : 'No attempts on this house in this range.'}</p>
   return (
     <>
       <AttemptGroup title="Representative failure" attempts={rows.filter((row) => row.falls > 0).slice(0, 1)} selected={selected} onSelect={setSelected} />

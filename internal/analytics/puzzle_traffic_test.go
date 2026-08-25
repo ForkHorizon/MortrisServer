@@ -12,33 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// seedCompleteHouse99Fixture is the plan doc's central edge case: run-a
-// is fully natural and completes normally; run-b has a natural placement,
-// then the tester opens the dev menu and runs a progress-changing
-// command. The started event still carries the pre-cheat attempt/
-// house_run IDs (PuzzleAnalyticsService.cs fires it before clearing
-// them) — that is what must poison run-b. The completion mutation itself
-// never carries attempt_id/house_run_id (the client clears them before
-// emitting it) — it must not need to for run-b to already be excluded.
-func seedCompleteHouse99Fixture(t *testing.T, pool *pgxpool.Pool, projectID, install string, now time.Time) {
-	t.Helper()
-	session := "99999999-9999-4999-8999-999999999999"
-	seedEvents(t, pool, projectID, []seedEvent{
-		{EventID: "a0000000-0000-4000-8000-000000000001", InstallID: install, SessionID: session, Sequence: 1, Name: "placement_resolved", Kind: "product", EffectiveAt: now,
-			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-a", "house_run_id": "run-a", "block_id": 1, "outcome": "placed"}},
-		{EventID: "a0000000-0000-4000-8000-000000000002", InstallID: install, SessionID: session, Sequence: 2, Name: "house_completed", Kind: "product", EffectiveAt: now.Add(time.Second),
-			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-a", "house_run_id": "run-a"}},
-		{EventID: "a0000000-0000-4000-8000-000000000003", InstallID: install, SessionID: session, Sequence: 3, Name: "placement_resolved", Kind: "product", EffectiveAt: now.Add(2 * time.Second),
-			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-b", "house_run_id": "run-b", "block_id": 2, "outcome": "placed"}},
-		{EventID: "a0000000-0000-4000-8000-000000000004", InstallID: install, SessionID: session, Sequence: 4, Name: "developer_command_started", Kind: "product", EffectiveAt: now.Add(3 * time.Second),
-			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-b", "house_run_id": "run-b", "origin": "developer_menu", "developer_action_id": "action-1", "developer_command": "CompleteHouse99"}},
-		{EventID: "a0000000-0000-4000-8000-000000000005", InstallID: install, SessionID: session, Sequence: 5, Name: "developer_progress_mutated", Kind: "product", EffectiveAt: now.Add(4 * time.Second),
-			Properties: map[string]any{"city_id": 1, "house_id": 1, "origin": "developer_menu", "developer_action_id": "action-1", "developer_command": "CompleteHouse99", "after_completed": true, "before_state_hash": "b", "after_state_hash": "a"}},
-	})
-}
-
-// The placements must remain natural at event level (rule 1), but the
-// house run must not count as a natural completion or a natural entry.
+// The plan doc's central edge case: natural placements, then
+// CompleteHouse99. The placements must remain natural at event level
+// (rule 1), but the house run must not count as a natural completion —
+// and a second, untouched natural run elsewhere must be unaffected.
 func TestPuzzleTraffic_CompleteHouse99DoesNotCountAsNaturalCompletion(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -47,7 +24,30 @@ func TestPuzzleTraffic_CompleteHouse99DoesNotCountAsNaturalCompletion(t *testing
 	install := "11111111-1111-4111-8111-111111111111"
 	seedInstallation(t, pool, projectID, install, &now)
 	seedRevisionForHouseWall(t, pool, projectID)
-	seedCompleteHouse99Fixture(t, pool, projectID, install, now)
+
+	// Run A: fully natural, completes normally.
+	seedEvents(t, pool, projectID, []seedEvent{
+		{EventID: "a0000000-0000-4000-8000-000000000001", InstallID: install, SessionID: "99999999-9999-4999-8999-999999999999", Sequence: 1, Name: "placement_resolved", Kind: "product", EffectiveAt: now,
+			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-a", "house_run_id": "run-a", "block_id": 1, "outcome": "placed"}},
+		{EventID: "a0000000-0000-4000-8000-000000000002", InstallID: install, SessionID: "99999999-9999-4999-8999-999999999999", Sequence: 2, Name: "house_completed", Kind: "product", EffectiveAt: now.Add(time.Second),
+			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-a", "house_run_id": "run-a"}},
+	})
+
+	// Run B: a natural placement, then the tester opens the dev menu and
+	// runs a progress-changing command. The started event still carries
+	// the pre-cheat attempt/house_run IDs (PuzzleAnalyticsService.cs fires
+	// it before clearing them) — that is what must poison this run.
+	seedEvents(t, pool, projectID, []seedEvent{
+		{EventID: "a0000000-0000-4000-8000-000000000003", InstallID: install, SessionID: "99999999-9999-4999-8999-999999999999", Sequence: 3, Name: "placement_resolved", Kind: "product", EffectiveAt: now.Add(2 * time.Second),
+			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-b", "house_run_id": "run-b", "block_id": 2, "outcome": "placed"}},
+		{EventID: "a0000000-0000-4000-8000-000000000004", InstallID: install, SessionID: "99999999-9999-4999-8999-999999999999", Sequence: 4, Name: "developer_command_started", Kind: "product", EffectiveAt: now.Add(3 * time.Second),
+			Properties: map[string]any{"city_id": 1, "house_id": 1, "attempt_id": "attempt-b", "house_run_id": "run-b", "origin": "developer_menu", "developer_action_id": "action-1", "developer_command": "CompleteHouse99"}},
+		// The completion mutation itself never carries attempt_id/house_run_id
+		// (the client clears them before emitting it) — it must not need to
+		// for run-b to already be correctly excluded.
+		{EventID: "a0000000-0000-4000-8000-000000000005", InstallID: install, SessionID: "99999999-9999-4999-8999-999999999999", Sequence: 5, Name: "developer_progress_mutated", Kind: "product", EffectiveAt: now.Add(4 * time.Second),
+			Properties: map[string]any{"city_id": 1, "house_id": 1, "origin": "developer_menu", "developer_action_id": "action-1", "developer_command": "CompleteHouse99", "after_completed": true, "before_state_hash": "b", "after_state_hash": "a"}},
+	})
 
 	houses, err := GetPuzzleHouses(ctx, pool, projectID, now.Add(-time.Minute), now.Add(time.Hour), ScopeNaturalOnly)
 	if err != nil {
@@ -72,21 +72,9 @@ func TestPuzzleTraffic_CompleteHouse99DoesNotCountAsNaturalCompletion(t *testing
 	if house.Attempts != 1 {
 		t.Errorf("attempts = %d, want 1 (attempt-b is developer-touched, so it must not count as a natural entry either)", house.Attempts)
 	}
-}
 
-// The classification view itself must show why: run-a stays fully
-// natural and completed, run-b is poisoned the moment the
-// developer_command_started event joins its group.
-func TestPuzzleTraffic_CompleteHouse99PoisonsHouseRunClassification(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	projectID := seedProject(t, pool, false)
-	now := time.Now().UTC().Truncate(time.Second)
-	install := "11111111-1111-4111-8111-111111111112"
-	seedInstallation(t, pool, projectID, install, &now)
-	seedRevisionForHouseWall(t, pool, projectID)
-	seedCompleteHouse99Fixture(t, pool, projectID, install, now)
-
+	// House-run classification directly: run-a fully natural and
+	// completed, run-b not fully natural.
 	var runANatural, runBNatural, runACompleted bool
 	if err := pool.QueryRow(ctx, `SELECT fully_natural, completed FROM puzzle_house_run_classification WHERE project_id=$1 AND house_run_id='run-a'`, projectID).Scan(&runANatural, &runACompleted); err != nil {
 		t.Fatalf("run-a classification: %v", err)
