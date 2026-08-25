@@ -18,14 +18,14 @@ type PuzzleOverview struct {
 	DataQuality        PuzzleDataQuality   `json:"data_quality"`
 }
 
-func GetPuzzleOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, build ...*string) (*PuzzleOverview, error) {
+func GetPuzzleOverview(ctx context.Context, pool *pgxpool.Pool, projectID string, from, to time.Time, scope TrafficScope, build ...*string) (*PuzzleOverview, error) {
 	selectedBuild := optionalBuild(build)
-	houses, err := GetPuzzleHouses(ctx, pool, projectID, from, to, selectedBuild)
+	houses, err := GetPuzzleHouses(ctx, pool, projectID, from, to, scope, selectedBuild)
 	if err != nil {
 		return nil, err
 	}
 	result := summarizePuzzleHouses(houses.Houses)
-	if err := loadPuzzleOverviewEvents(ctx, pool, result, projectID, from, to, selectedBuild); err != nil {
+	if err := loadPuzzleOverviewEvents(ctx, pool, result, projectID, from, to, scope, selectedBuild); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -51,15 +51,14 @@ func summarizePuzzleHouses(houses []PuzzleHouseSummary) *PuzzleOverview {
 	return result
 }
 
-func loadPuzzleOverviewEvents(ctx context.Context, pool *pgxpool.Pool, result *PuzzleOverview, projectID string, from, to time.Time, build *string) error {
+func loadPuzzleOverviewEvents(ctx context.Context, pool *pgxpool.Pool, result *PuzzleOverview, projectID string, from, to time.Time, scope TrafficScope, build *string) error {
 	rows, err := pool.Query(ctx, `
 SELECT COALESCE(properties->>'outcome',''), (properties->>'wave_index')::int,
        COUNT(*), COUNT(*) FILTER (WHERE properties->>'outcome' LIKE 'fell_%')
 FROM events WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3
-	  AND ($4::text IS NULL OR build_number=$4)
+  AND ($4::text IS NULL OR build_number=$4)
   AND name='placement_resolved'
-  AND COALESCE(properties->>'origin','player')='player'
-  AND COALESCE(properties->>'progress_origin','natural')='natural'
+  AND `+scope.eventPredicate()+`
 GROUP BY 1,2`, projectID, from, to, build)
 	if err != nil {
 		return err
@@ -99,9 +98,10 @@ func loadPuzzleOverviewQuality(ctx context.Context, pool *pgxpool.Pool, result *
 	err := pool.QueryRow(ctx, `
 SELECT COUNT(*) FILTER (WHERE r.content_revision IS NULL), COUNT(*) FILTER (WHERE r.content_revision IS NOT NULL)
 FROM events e LEFT JOIN puzzle_content_revisions r ON r.project_id=e.project_id AND r.content_revision=e.properties->>'content_revision'
-WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3 AND ($4::text IS NULL OR e.build_number=$4) AND e.name='placement_resolved'
+WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3 AND e.name='placement_resolved'
+  AND ($4::text IS NULL OR e.build_number=$4)
   AND COALESCE(e.properties->>'origin','player')='player'
-	  AND COALESCE(e.properties->>'progress_origin','natural')='natural'`, projectID, from, to, build).Scan(&legacy, &corrected)
+  AND COALESCE(e.properties->>'progress_origin','natural')='natural'`, projectID, from, to, build).Scan(&legacy, &corrected)
 	result.DataQuality = PuzzleDataQuality{LegacyRevisionEvents: legacy, CoordinateStatus: coordinateStatus(legacy, corrected)}
 	return err
 }

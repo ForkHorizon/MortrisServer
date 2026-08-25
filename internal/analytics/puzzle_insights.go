@@ -44,24 +44,33 @@ type puzzleMetricSamples struct {
 	times map[int][]int64
 }
 
-func loadPuzzleHouseInsights(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time, build *string) error {
-	events, err := loadPuzzleMetricEvents(ctx, pool, projectID, detail.CityID, detail.HouseID, from, to, build)
+func loadPuzzleHouseInsights(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time, scope TrafficScope, build *string) error {
+	events, err := loadPuzzleMetricEvents(ctx, pool, projectID, detail.CityID, detail.HouseID, from, to, scope, build)
 	if err != nil {
 		return err
 	}
-	applyPuzzleInsights(detail, events)
+	// Retry/time-to-place samples and wave entry counts are attempt-scoped
+	// (plan section 6, rules 2-3: "interactions whose whole chain is
+	// natural and belongs to one attempt," "include only fully natural
+	// house runs"), unlike the per-block fall-rate metrics events feeds,
+	// which stay event-level (rule 1). eligible is which attempt_ids
+	// qualify at the coarser, whole-attempt granularity.
+	eligible, err := loadEligibleAttempts(ctx, pool, projectID, detail.CityID, detail.HouseID, from, to, scope)
+	if err != nil {
+		return err
+	}
+	applyPuzzleInsights(detail, events, eligible)
 	return loadPuzzleDataQuality(ctx, pool, detail, projectID, from, to, build)
 }
 
-func loadPuzzleMetricEvents(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, build *string) ([]puzzleMetricEvent, error) {
+func loadPuzzleMetricEvents(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, scope TrafficScope, build *string) ([]puzzleMetricEvent, error) {
 	rows, err := pool.Query(ctx, `
 SELECT name, effective_at, properties FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
-	  AND ($6::text IS NULL OR build_number=$6)
+  AND ($6::text IS NULL OR build_number=$6)
   AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
   AND name IN ('detail_taken','placement_resolved','hint_used')
-  AND COALESCE(properties->>'origin','player')='player'
-  AND COALESCE(properties->>'progress_origin','natural')='natural'
+  AND `+scope.eventPredicate()+`
 ORDER BY properties->>'attempt_id', CASE WHEN properties->>'attempt_event_index' ~ '^[0-9]+$' THEN (properties->>'attempt_event_index')::int ELSE 2147483647 END, effective_at, event_id`, projectID, cityID, houseID, from, to, build)
 	if err != nil {
 		return nil, err
@@ -78,14 +87,36 @@ ORDER BY properties->>'attempt_id', CASE WHEN properties->>'attempt_event_index'
 	return result, rows.Err()
 }
 
-func applyPuzzleInsights(detail *PuzzleHouseDetail, events []puzzleMetricEvent) {
+// loadEligibleAttempts is the attempt-level half of the same scope this
+// house's event-level metrics already use — see loadPuzzleHouseInsights.
+func loadEligibleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, scope TrafficScope) (map[string]bool, error) {
+	rows, err := pool.Query(ctx, `
+SELECT attempt_id FROM puzzle_wave_attempt_classification
+WHERE project_id=$1 AND city_id=$2 AND house_id=$3 AND last_event_at>=$4 AND last_event_at<$5 AND `+scope.runPredicate("fully_natural"),
+		projectID, cityID, houseID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	eligible := map[string]bool{}
+	for rows.Next() {
+		var attemptID string
+		if err := rows.Scan(&attemptID); err != nil {
+			return nil, err
+		}
+		eligible[attemptID] = true
+	}
+	return eligible, rows.Err()
+}
+
+func applyPuzzleInsights(detail *PuzzleHouseDetail, events []puzzleMetricEvent, eligibleAttempts map[string]bool) {
 	blocks := puzzleBlockIndex(detail)
 	states := map[string]*puzzleMetricState{}
 	waveAttempts := map[int]map[string]bool{}
 	waves := map[int]*PuzzleWaveSummary{}
 	samples := puzzleMetricSamples{tries: map[int][]int{}, times: map[int][]int64{}}
 	for _, event := range events {
-		applyPuzzleInsightEvent(blocks, states, waves, waveAttempts, samples, event)
+		applyPuzzleInsightEvent(blocks, states, waves, waveAttempts, samples, event, eligibleAttempts)
 	}
 	for i := range detail.Blocks {
 		finalizePuzzleBlockInsight(&detail.Blocks[i])
@@ -105,7 +136,7 @@ func puzzleBlockIndex(detail *PuzzleHouseDetail) map[int]*PuzzleHouseBlock {
 	return result
 }
 
-func applyPuzzleInsightEvent(blocks map[int]*PuzzleHouseBlock, states map[string]*puzzleMetricState, waves map[int]*PuzzleWaveSummary, waveAttempts map[int]map[string]bool, samples puzzleMetricSamples, event puzzleMetricEvent) {
+func applyPuzzleInsightEvent(blocks map[int]*PuzzleHouseBlock, states map[string]*puzzleMetricState, waves map[int]*PuzzleWaveSummary, waveAttempts map[int]map[string]bool, samples puzzleMetricSamples, event puzzleMetricEvent, eligibleAttempts map[string]bool) {
 	payload, ok := attemptEventPayload(event.Properties)
 	if !ok {
 		return
@@ -137,7 +168,7 @@ func applyPuzzleInsightEvent(blocks map[int]*PuzzleHouseBlock, states map[string
 		state.TakenAt = number64(payload["active_elapsed_ms"])
 		return
 	}
-	applyPlacementInsight(block, state, waves, waveAttempts, samples, attemptID, payload)
+	applyPlacementInsight(block, state, waves, waveAttempts, samples, attemptID, payload, eligibleAttempts[attemptID])
 }
 
 func applyHintPressure(blocks map[int]*PuzzleHouseBlock, state *puzzleMetricState) {
@@ -147,7 +178,13 @@ func applyHintPressure(blocks map[int]*PuzzleHouseBlock, state *puzzleMetricStat
 	state.LastFailedBlock = -1
 }
 
-func applyPlacementInsight(block *PuzzleHouseBlock, state *puzzleMetricState, waves map[int]*PuzzleWaveSummary, waveAttempts map[int]map[string]bool, samples puzzleMetricSamples, attemptID string, payload map[string]any) {
+// attemptEligible gates the attempt-scoped accumulations (wave entry,
+// retry-to-success and time-to-place samples — plan section 6, rules 2-3)
+// on top of the event-level scope already applied by the caller's query.
+// Per-block fall-rate/no-snap/missing-support/first-try/hint-pressure
+// stay ungated: rule 1 keeps those event-level regardless of whether the
+// rest of the attempt was touched.
+func applyPlacementInsight(block *PuzzleHouseBlock, state *puzzleMetricState, waves map[int]*PuzzleWaveSummary, waveAttempts map[int]map[string]bool, samples puzzleMetricSamples, attemptID string, payload map[string]any, attemptEligible bool) {
 	if state.ActiveBlock != block.BlockID {
 		state.Tries, state.TakenAt, state.ActiveBlock = 0, -1, block.BlockID
 	}
@@ -155,10 +192,12 @@ func applyPlacementInsight(block *PuzzleHouseBlock, state *puzzleMetricState, wa
 	outcome, _ := payload["outcome"].(string)
 	waveIndex := number(payload["wave_index"])
 	wave := waveFor(waves, waveIndex)
-	if waveAttempts[waveIndex] == nil {
-		waveAttempts[waveIndex] = map[string]bool{}
+	if attemptEligible {
+		if waveAttempts[waveIndex] == nil {
+			waveAttempts[waveIndex] = map[string]bool{}
+		}
+		waveAttempts[waveIndex][attemptID] = true
 	}
-	waveAttempts[waveIndex][attemptID] = true
 	wave.Placements++
 	if state.Tries == 1 {
 		block.FirstTryAttempts++
@@ -180,10 +219,12 @@ func applyPlacementInsight(block *PuzzleHouseBlock, state *puzzleMetricState, wa
 		return
 	}
 	block.SuccessfulPlacements++
-	samples.tries[block.BlockID] = append(samples.tries[block.BlockID], state.Tries)
-	if elapsed := number64(payload["active_elapsed_ms"]); elapsed >= state.TakenAt && state.TakenAt >= 0 {
-		block.TimeToPlaceSamples++
-		samples.times[block.BlockID] = append(samples.times[block.BlockID], elapsed-state.TakenAt)
+	if attemptEligible {
+		samples.tries[block.BlockID] = append(samples.tries[block.BlockID], state.Tries)
+		if elapsed := number64(payload["active_elapsed_ms"]); elapsed >= state.TakenAt && state.TakenAt >= 0 {
+			block.TimeToPlaceSamples++
+			samples.times[block.BlockID] = append(samples.times[block.BlockID], elapsed-state.TakenAt)
+		}
 	}
 	state.Tries, state.TakenAt, state.ActiveBlock, state.LastFailedBlock = 0, -1, -1, -1
 }

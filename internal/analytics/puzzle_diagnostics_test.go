@@ -40,7 +40,7 @@ func TestLoadGameplaySummary_CapsLongBackgroundGap(t *testing.T) {
 		{EventID: "f3333333-3333-4333-8333-333333333333", InstallID: installID, SessionID: "b2222222-2222-4222-8222-222222222222", Sequence: 1, Name: "wave_completed", Kind: "product", EffectiveAt: now.Add(time.Minute + 72*time.Hour), Properties: gameplayTestProps("attempt-1", 120_000)},
 	})
 
-	result, err := GetGameplayDiagnostics(context.Background(), pool, projectID, now.Add(-time.Hour), now.Add(73*time.Hour), time.UTC, GameplayFilter{})
+	result, err := GetGameplayDiagnostics(context.Background(), pool, projectID, now.Add(-time.Hour), now.Add(73*time.Hour), time.UTC, GameplayFilter{}, ScopeNaturalOnly)
 	if err != nil {
 		t.Fatalf("GetGameplayDiagnostics: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestLoadGameplayOutcomes_ClassifiesAttempts(t *testing.T) {
 		{EventID: "a6666666-6666-4666-8666-666666666666", InstallID: installID, SessionID: "b5555555-5555-4555-8555-555555555555", Sequence: 1, Name: "wave_started", Kind: "product", EffectiveAt: now.Add(-48 * time.Hour), Properties: gameplayTestProps("attempt-lost", 0)},
 	})
 
-	result, err := GetGameplayDiagnostics(context.Background(), pool, projectID, now.Add(-72*time.Hour), now.Add(time.Hour), time.UTC, GameplayFilter{})
+	result, err := GetGameplayDiagnostics(context.Background(), pool, projectID, now.Add(-72*time.Hour), now.Add(time.Hour), time.UTC, GameplayFilter{}, ScopeNaturalOnly)
 	if err != nil {
 		t.Fatalf("GetGameplayDiagnostics: %v", err)
 	}
