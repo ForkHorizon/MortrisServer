@@ -58,7 +58,7 @@ type PuzzleHouseDetail struct {
 	DataQuality     PuzzleDataQuality   `json:"data_quality"`
 }
 
-func GetPuzzleHouse(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) (*PuzzleHouseDetail, error) {
+func GetPuzzleHouse(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, build ...*string) (*PuzzleHouseDetail, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	revision, err := latestPuzzleRevision(ctx, pool, projectID)
@@ -69,10 +69,11 @@ func GetPuzzleHouse(ctx context.Context, pool *pgxpool.Pool, projectID string, c
 	if err := loadPuzzleHouseBlocks(ctx, pool, detail, projectID, revision); err != nil {
 		return nil, err
 	}
-	if err := loadPuzzleHouseMetrics(ctx, pool, detail, projectID, from, to); err != nil {
+	selectedBuild := optionalBuild(build)
+	if err := loadPuzzleHouseMetrics(ctx, pool, detail, projectID, from, to, selectedBuild); err != nil {
 		return nil, err
 	}
-	if err := loadPuzzleHouseInsights(ctx, pool, detail, projectID, from, to); err != nil {
+	if err := loadPuzzleHouseInsights(ctx, pool, detail, projectID, from, to, selectedBuild); err != nil {
 		return nil, err
 	}
 	// The jsonpath is built here rather than concatenated in SQL: the
@@ -138,7 +139,7 @@ func scanPuzzleHouseBlock(rows rowScanner) (PuzzleHouseBlock, error) {
 // loadPuzzleHouseMetrics folds play outcomes onto the blocks already
 // loaded. A block with no events keeps its zeroes, which the dashboard
 // renders as "not played yet" rather than as a perfect score.
-func loadPuzzleHouseMetrics(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time) error {
+func loadPuzzleHouseMetrics(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time, build *string) error {
 	rows, err := pool.Query(ctx, `
 SELECT (properties->>'block_id')::int block_id,
        COALESCE(properties->>'outcome','') outcome,
@@ -146,11 +147,12 @@ SELECT (properties->>'block_id')::int block_id,
 FROM events
 WHERE project_id=$1 AND name='placement_resolved'
   AND effective_at>=$2 AND effective_at<$3
+	  AND ($6::text IS NULL OR build_number=$6)
   AND (properties->>'city_id')::int=$4 AND (properties->>'house_id')::int=$5
   AND properties ? 'block_id'
   AND COALESCE(properties->>'origin','player')='player'
   AND COALESCE(properties->>'progress_origin','natural')='natural'
-GROUP BY 1,2`, projectID, from, to, detail.CityID, detail.HouseID)
+GROUP BY 1,2`, projectID, from, to, detail.CityID, detail.HouseID, build)
 	if err != nil {
 		return err
 	}

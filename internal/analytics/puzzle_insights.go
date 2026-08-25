@@ -44,24 +44,25 @@ type puzzleMetricSamples struct {
 	times map[int][]int64
 }
 
-func loadPuzzleHouseInsights(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time) error {
-	events, err := loadPuzzleMetricEvents(ctx, pool, projectID, detail.CityID, detail.HouseID, from, to)
+func loadPuzzleHouseInsights(ctx context.Context, pool *pgxpool.Pool, detail *PuzzleHouseDetail, projectID string, from, to time.Time, build *string) error {
+	events, err := loadPuzzleMetricEvents(ctx, pool, projectID, detail.CityID, detail.HouseID, from, to, build)
 	if err != nil {
 		return err
 	}
 	applyPuzzleInsights(detail, events)
-	return loadPuzzleDataQuality(ctx, pool, detail, projectID, from, to)
+	return loadPuzzleDataQuality(ctx, pool, detail, projectID, from, to, build)
 }
 
-func loadPuzzleMetricEvents(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time) ([]puzzleMetricEvent, error) {
+func loadPuzzleMetricEvents(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, build *string) ([]puzzleMetricEvent, error) {
 	rows, err := pool.Query(ctx, `
 SELECT name, effective_at, properties FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
+	  AND ($6::text IS NULL OR build_number=$6)
   AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
   AND name IN ('detail_taken','placement_resolved','hint_used')
   AND COALESCE(properties->>'origin','player')='player'
   AND COALESCE(properties->>'progress_origin','natural')='natural'
-ORDER BY properties->>'attempt_id', CASE WHEN properties->>'attempt_event_index' ~ '^[0-9]+$' THEN (properties->>'attempt_event_index')::int ELSE 2147483647 END, effective_at, event_id`, projectID, cityID, houseID, from, to)
+ORDER BY properties->>'attempt_id', CASE WHEN properties->>'attempt_event_index' ~ '^[0-9]+$' THEN (properties->>'attempt_event_index')::int ELSE 2147483647 END, effective_at, event_id`, projectID, cityID, houseID, from, to, build)
 	if err != nil {
 		return nil, err
 	}
