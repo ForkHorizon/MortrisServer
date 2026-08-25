@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiGet } from '../api/client'
-import type { PuzzleDropMap, PuzzleHouseDetail, PuzzleQuality, PuzzleTesterImpact, TrafficScope } from '../api/houseTypes'
+import type { PuzzleDropMap, PuzzleHouseDetail } from '../api/houseTypes'
+import type { PuzzleQuality, PuzzleTesterImpact, PuzzleWaveFunnel, TrafficScope } from '../api/puzzleQualityTypes'
 import { useAuth } from '../auth/useAuth'
 import { DateRangeFields } from '../components/DateRangeFields'
 import { Freshness } from '../components/Freshness'
@@ -56,6 +57,8 @@ export function HouseDetailPage() {
   const quality = useApiData(fetchQuality, `puzzle-quality:${currentProject}:${from}:${to}:${build}`)
   const fetchTesterImpact = useCallback(() => apiGet<PuzzleTesterImpact>('/api/v1/analytics/gameplay/tester-impact', { project: currentProject, from, to }), [currentProject, from, to])
   const testerImpact = useApiData(fetchTesterImpact, `puzzle-tester-impact:${currentProject}:${from}:${to}`)
+  const fetchWaveFunnel = useCallback(() => apiGet<PuzzleWaveFunnel>(`/api/v1/analytics/gameplay/houses/${city}/${house}/funnel`, { project: currentProject, from, to, build: build || undefined, scope }), [currentProject, city, house, from, to, build, scope])
+  const waveFunnel = useApiData(fetchWaveFunnel, `puzzle-wave-funnel:${currentProject}:${city}:${house}:${from}:${to}:${build}:${scope}`)
 
   if (!currentProject) return <p>Select a project to inspect a house.</p>
   return (
@@ -76,8 +79,10 @@ export function HouseDetailPage() {
           house={house ?? ''}
           from={from}
           to={to}
+          build={build}
           view={view}
           dropMap={dropMap.data}
+          waveFunnel={waveFunnel.data}
         />
       )}
     </section>

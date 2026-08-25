@@ -1,4 +1,4 @@
-import type { TrafficScope } from '../api/houseTypes'
+import type { TrafficScope } from '../api/puzzleQualityTypes'
 
 // Stage 3's scope control (docs/puzzle-analytics-remaining-plan.md section 6):
 // Natural only is the default and the only scope a verdict may come from;

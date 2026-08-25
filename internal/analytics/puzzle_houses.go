@@ -40,6 +40,26 @@ type PuzzleHouseSummary struct {
 	RateIsReliable bool `json:"rate_is_reliable"`
 	HasGeometry    bool `json:"has_geometry"`
 	HasArt         bool `json:"has_art"`
+
+	// Coverage fields (Stage 4, plan section 7) are house_run_id-scoped
+	// and always natural, regardless of the endpoint's TrafficScope
+	// parameter — see puzzle_house_coverage.go's file doc comment.
+	TotalWaves               int        `json:"total_waves"`
+	WavesReached             int        `json:"waves_reached"`
+	NaturalHouseRunsStarted  int64      `json:"natural_house_runs_started"`
+	NaturalHouseRunsComplete int64      `json:"natural_house_runs_completed"`
+	NaturalCompletionRate    float64    `json:"natural_completion_rate"`
+	LastNaturalPlayAt        *time.Time `json:"last_natural_play_at,omitempty"`
+	LastNaturalBuild         string     `json:"last_natural_build,omitempty"`
+	// DeveloperRunsObserved is true when this house also had at least one
+	// developer-touched house run in range — the natural numbers above
+	// are still trustworthy, but it is worth a caveat that testing
+	// happened here specifically.
+	DeveloperRunsObserved bool `json:"developer_runs_observed"`
+	// EvidenceState is "unplayed", "thin", "usable", or "mixed_quality" —
+	// see evidenceState's doc comment. Never rank by fall rate outside
+	// usable/mixed_quality.
+	EvidenceState string `json:"evidence_state"`
 }
 
 type PuzzleHouseList struct {
@@ -81,9 +101,12 @@ func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 	defer rows.Close()
 	for rows.Next() {
 		var row PuzzleHouseSummary
+		var totalRuns int64
 		if err := rows.Scan(&row.CityID, &row.HouseID, &row.DisplayLabel, &row.HasGeometry, &row.HasArt,
 			&row.Attempts, &row.CompletedAttempts, &row.UniqueInstallations, &row.PlayedDetailCount, &row.ReliableDetailCount, &row.DominantFailure,
-			&row.Placements, &row.Falls, &row.Hints); err != nil {
+			&row.Placements, &row.Falls, &row.Hints,
+			&row.TotalWaves, &row.WavesReached, &row.NaturalHouseRunsStarted, &row.NaturalHouseRunsComplete, &totalRuns,
+			&row.LastNaturalPlayAt, &row.LastNaturalBuild); err != nil {
 			return nil, err
 		}
 		row.OpenedAttempts = row.Attempts
@@ -91,6 +114,11 @@ func GetPuzzleHouses(ctx context.Context, pool *pgxpool.Pool, projectID string, 
 			row.FallRate = float64(row.Falls) / float64(row.Placements)
 		}
 		row.RateIsReliable = row.Placements >= minPlacementsForRate
+		if row.NaturalHouseRunsStarted > 0 {
+			row.NaturalCompletionRate = float64(row.NaturalHouseRunsComplete) / float64(row.NaturalHouseRunsStarted)
+		}
+		row.DeveloperRunsObserved = totalRuns > row.NaturalHouseRunsStarted
+		row.EvidenceState = evidenceState(&row)
 		result.Houses = append(result.Houses, row)
 	}
 	return result, rows.Err()
@@ -113,7 +141,8 @@ func puzzleHousesCTEs(scope TrafficScope) string {
 	return `
 WITH house AS (
     SELECT city_id, house_id,
-           bool_or(bounds_min_x_milli IS NOT NULL) has_geometry
+           bool_or(bounds_min_x_milli IS NOT NULL) has_geometry,
+           COUNT(DISTINCT wave_index) total_waves
     FROM puzzle_content_blocks
     WHERE project_id=$1 AND content_revision=$2
     GROUP BY 1,2
@@ -155,7 +184,7 @@ WITH house AS (
 	) blocks
 	GROUP BY 1,2
 )
-`
+` + puzzleHousesCoverageCTEs()
 }
 
 const puzzleHousesSelect = `
@@ -167,12 +196,17 @@ SELECT h.city_id, h.house_id,
 	       EXISTS(SELECT 1 FROM puzzle_house_art art WHERE art.project_id=$1 AND art.content_revision=$2 AND art.city_id=h.city_id AND art.house_id=h.house_id) has_art,
        COALESCE(a.attempts,0), COALESCE(a.completed_attempts,0), COALESCE(a.unique_installations,0),
 	   COALESCE(d.played_details,0), COALESCE(d.reliable_details,0), COALESCE(m.dominant_failure,''),
-	   COALESCE(m.placements,0), COALESCE(m.falls,0), COALESCE(m.hints,0)
+	   COALESCE(m.placements,0), COALESCE(m.falls,0), COALESCE(m.hints,0),
+	   h.total_waves, COALESCE(w.waves_reached,0), COALESCE(ra.started,0), COALESCE(ra.completed,0), COALESCE(ar.total_runs,0),
+	   ra.last_play_at, COALESCE(ra.last_build,'')
 FROM house h
 JOIN puzzle_content_revisions r ON r.project_id=$1 AND r.content_revision=$2
 LEFT JOIN attempt_agg a ON a.city_id=h.city_id AND a.house_id=h.house_id
 LEFT JOIN metric_agg m ON m.city_id=h.city_id AND m.house_id=h.house_id
 LEFT JOIN detail_counts d ON d.city_id=h.city_id AND d.house_id=h.house_id
+LEFT JOIN run_agg ra ON ra.city_id=h.city_id AND ra.house_id=h.house_id
+LEFT JOIN all_runs ar ON ar.city_id=h.city_id AND ar.house_id=h.house_id
+LEFT JOIN wave_reach w ON w.city_id=h.city_id AND w.house_id=h.house_id
 ORDER BY COALESCE(m.placements,0) DESC, h.city_id, h.house_id`
 
 func optionalBuild(build []*string) *string {
