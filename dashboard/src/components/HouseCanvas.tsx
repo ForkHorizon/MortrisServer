@@ -82,7 +82,13 @@ type Props = {
   /** Placement rule of the selected detail, drawn as a dependency graph. */
   support?: { targetBlockID: number; groups: number[][] } | null
   metric?: HouseMetric
-  replayRelease?: { x: number; y: number; targetID: number } | null
+  replayRelease?: {
+    x?: number | null
+    y?: number | null
+    targetX?: number | null
+    targetY?: number | null
+    targetID?: number | null
+  } | null
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
@@ -140,12 +146,42 @@ export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = tr
   )
 }
 
-function ReplayArrow({ blocks, release, scale }: { blocks: PuzzleHouseBlock[]; release: { x: number; y: number; targetID: number }; scale: number }) {
-  const target = blocks.find((block) => block.block_id === release.targetID)?.bounds_milli
-  if (!target || release.x < 0 || release.y < 0) return null
-  const x = (target.min_x + target.max_x) / 2
-  const y = (target.min_y + target.max_y) / 2
-  return <line x1={release.x} y1={-release.y} x2={x} y2={-y} stroke="#ffffff" strokeWidth={scale * 1.2} strokeDasharray={`${scale * 4} ${scale * 2}`} />
+function ReplayArrow({
+  blocks,
+  release,
+  scale,
+}: {
+  blocks: PuzzleHouseBlock[]
+  release: {
+    x?: number | null
+    y?: number | null
+    targetX?: number | null
+    targetY?: number | null
+    targetID?: number | null
+  }
+  scale: number
+}) {
+  if (release.x == null || release.y == null) return null
+  let tx = release.targetX
+  let ty = release.targetY
+  if (tx == null || ty == null) {
+    if (release.targetID == null || release.targetID < 0) return null
+    const target = blocks.find((block) => block.block_id === release.targetID)?.bounds_milli
+    if (!target) return null
+    tx = (target.min_x + target.max_x) / 2
+    ty = (target.min_y + target.max_y) / 2
+  }
+  return (
+    <line
+      x1={release.x}
+      y1={-release.y}
+      x2={tx}
+      y2={-ty}
+      stroke="#ffffff"
+      strokeWidth={scale * 1.2}
+      strokeDasharray={`${scale * 4} ${scale * 2}`}
+    />
+  )
 }
 
 type ReplayState = { standing: boolean; active: boolean; missing: boolean }

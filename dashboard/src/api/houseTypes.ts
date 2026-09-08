@@ -143,8 +143,10 @@ export interface PuzzleReplayStep {
   outcome: string
   rule_state: string
   wave_index: number
-  release_x_milli: number
-  release_y_milli: number
+  release_x_milli?: number | null
+  release_y_milli?: number | null
+  target_x_milli?: number | null
+  target_y_milli?: number | null
   active_elapsed_ms: number
   interaction_id?: string
   origin?: string

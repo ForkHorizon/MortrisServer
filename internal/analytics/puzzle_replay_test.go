@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -112,6 +113,98 @@ func TestReplayReportsSequenceAndInteractionIntegrity(t *testing.T) {
 	replay := buildReplay("a", raw, testCatalog())
 	if replay.SequenceGaps != 1 || replay.OrphanInteractions != 1 || replay.StateHashMismatches != 1 {
 		t.Fatalf("integrity = gaps:%d orphans:%d hashes:%d", replay.SequenceGaps, replay.OrphanInteractions, replay.StateHashMismatches)
+	}
+}
+
+// In house_local space, negative coordinates are valid and must be preserved as
+// non-nil pointers. Absence of coordinates must result in nil pointers and be
+// omitted from serialized JSON.
+func TestReplayPreservesNegativeCoordinatesAndDistinguishesAbsence(t *testing.T) {
+	raw := &GameplayAttempt{Events: []GameplayAttemptEvent{
+		replayEvent("detail_released", map[string]any{
+			"city_id": 1.0, "house_id": 2.0, "block_id": 10.0,
+			"release_x_milli": -350.0, "release_y_milli": -1.0,
+		}),
+		replayEvent("detail_taken", map[string]any{
+			"city_id": 1.0, "house_id": 2.0, "block_id": 10.0,
+		}),
+		replayEvent("detail_released", map[string]any{
+			"city_id": 1.0, "house_id": 2.0, "block_id": 10.0,
+			"release_x_milli": 0.0, "release_y_milli": 0.0,
+		}),
+	}}
+	replay := buildReplay("a", raw, testCatalog())
+	if len(replay.Steps) != 3 {
+		t.Fatalf("steps = %d, want 3", len(replay.Steps))
+	}
+	step0 := replay.Steps[0]
+	if step0.ReleaseX == nil || *step0.ReleaseX != -350 {
+		t.Fatalf("step 0 ReleaseX = %v, want -350", step0.ReleaseX)
+	}
+	if step0.ReleaseY == nil || *step0.ReleaseY != -1 {
+		t.Fatalf("step 0 ReleaseY = %v, want -1", step0.ReleaseY)
+	}
+
+	step1 := replay.Steps[1]
+	if step1.ReleaseX != nil || step1.ReleaseY != nil {
+		t.Fatalf("step 1 coords should be nil, got x=%v y=%v", step1.ReleaseX, step1.ReleaseY)
+	}
+
+	step2 := replay.Steps[2]
+	if step2.ReleaseX == nil || *step2.ReleaseX != 0 || step2.ReleaseY == nil || *step2.ReleaseY != 0 {
+		t.Fatalf("step 2 coords should be 0, got x=%v y=%v", step2.ReleaseX, step2.ReleaseY)
+	}
+
+	marshaled, err := json.Marshal(replay.Steps)
+	if err != nil {
+		t.Fatalf("marshal err = %v", err)
+	}
+	jsonStr := string(marshaled)
+	if !strings.Contains(jsonStr, `"release_x_milli":-350`) || !strings.Contains(jsonStr, `"release_y_milli":-1`) {
+		t.Fatalf("json missing negative coords: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"release_x_milli":0`) || !strings.Contains(jsonStr, `"release_y_milli":0`) {
+		t.Fatalf("json missing zero coords: %s", jsonStr)
+	}
+}
+
+// Targets in puzzle_content_targets have their own coordinates and need not
+// equal block_id. When candidate_target_id is present, TargetX and TargetY must
+// be resolved from the catalog.
+func TestReplayDecouplesTargetIDFromBlockID(t *testing.T) {
+	catalog := testCatalog()
+	// Add a target where target_id (99) != block_id (10) with known coordinates
+	catalog.Cities[0].Houses[0].Targets = append(catalog.Cities[0].Houses[0].Targets, PuzzleCatalogTarget{
+		TargetID:           99,
+		WaveIndex:          0,
+		CompatibleBlockIDs: []int{10},
+		LocalXMilli:        1500,
+		LocalYMilli:        -2200,
+	})
+
+	raw := &GameplayAttempt{Events: []GameplayAttemptEvent{
+		replayEvent("placement_resolved", map[string]any{
+			"city_id": 1.0, "house_id": 2.0, "block_id": 10.0,
+			"candidate_target_id": 99.0, "outcome": "placed",
+			"release_x_milli": 1490.0, "release_y_milli": -2210.0,
+		}),
+	}}
+	replay := buildReplay("a", raw, catalog)
+	if len(replay.Steps) != 1 {
+		t.Fatalf("steps = %d, want 1", len(replay.Steps))
+	}
+	step := replay.Steps[0]
+	if step.BlockID != 10 {
+		t.Fatalf("block_id = %d, want 10", step.BlockID)
+	}
+	if step.TargetID != 99 {
+		t.Fatalf("target_id = %d, want 99", step.TargetID)
+	}
+	if step.TargetX == nil || *step.TargetX != 1500 {
+		t.Fatalf("TargetX = %v, want 1500", step.TargetX)
+	}
+	if step.TargetY == nil || *step.TargetY != -2200 {
+		t.Fatalf("TargetY = %v, want -2200", step.TargetY)
 	}
 }
 

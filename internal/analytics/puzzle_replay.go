@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/ForkHorizon/Mortris/internal/apierr"
@@ -25,8 +26,10 @@ type PuzzleReplayStep struct {
 	Outcome           string    `json:"outcome"`
 	RuleState         string    `json:"rule_state"`
 	WaveIndex         int       `json:"wave_index"`
-	ReleaseX          int       `json:"release_x_milli"`
-	ReleaseY          int       `json:"release_y_milli"`
+	ReleaseX          *int      `json:"release_x_milli,omitempty"`
+	ReleaseY          *int      `json:"release_y_milli,omitempty"`
+	TargetX           *int      `json:"target_x_milli,omitempty"`
+	TargetY           *int      `json:"target_y_milli,omitempty"`
 	ActiveElapsedMS   int64     `json:"active_elapsed_ms"`
 	InteractionID     string    `json:"interaction_id,omitempty"`
 	Origin            string    `json:"origin,omitempty"`
@@ -127,10 +130,12 @@ func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) 
 		step := PuzzleReplayStep{
 			Index: len(replay.Steps), Name: raw.Events[i].Name, At: raw.Events[i].EffectiveAt,
 			BlockID: -1, TargetID: -1, WaveIndex: number(payload["wave_index"]),
-			ReleaseX: number(payload["release_x_milli"]), ReleaseY: number(payload["release_y_milli"]), ActiveElapsedMS: number64(payload["active_elapsed_ms"]),
+			ReleaseX: coordinatePtr(payload["release_x_milli"]), ReleaseY: coordinatePtr(payload["release_y_milli"]),
+			ActiveElapsedMS: number64(payload["active_elapsed_ms"]),
 		}
 		step.BlockID = number(payload["block_id"])
 		step.TargetID = number(payload["candidate_target_id"])
+		step.TargetX, step.TargetY = catalogTargetCoords(catalog, replay.CityID, replay.HouseID, step.TargetID)
 		step.Outcome, _ = payload["outcome"].(string)
 		step.RuleState, _ = payload["rule_state"].(string)
 		step.InteractionID, _ = payload["interaction_id"].(string)
@@ -144,6 +149,54 @@ func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) 
 	}
 	replay.OrphanInteractions = len(openInteractions)
 	return replay
+}
+
+func coordinatePtr(value any) *int {
+	if value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case int:
+		v := typed
+		return &v
+	case int64:
+		v := int(typed)
+		return &v
+	case float64:
+		v := int(typed)
+		return &v
+	case string:
+		if typed == "" {
+			return nil
+		}
+		if v, err := strconv.Atoi(typed); err == nil {
+			return &v
+		}
+	}
+	return nil
+}
+
+func catalogTargetCoords(catalog PuzzleCatalog, cityID, houseID, targetID int) (*int, *int) {
+	if targetID < 0 {
+		return nil, nil
+	}
+	for _, city := range catalog.Cities {
+		if city.CityID != cityID {
+			continue
+		}
+		for _, house := range city.Houses {
+			if house.HouseID != houseID {
+				continue
+			}
+			for _, target := range house.Targets {
+				if target.TargetID == targetID {
+					x, y := target.LocalXMilli, target.LocalYMilli
+					return &x, &y
+				}
+			}
+		}
+	}
+	return nil, nil
 }
 
 func updateReplaySequence(replay *PuzzleReplay, eventIndex, previous int) int {
@@ -197,6 +250,9 @@ func applyReplayPlacement(step *PuzzleReplayStep, catalog PuzzleCatalog, install
 	}
 	step.BlockID = number(payload["block_id"])
 	step.TargetID = number(payload["candidate_target_id"])
+	if step.TargetX == nil || step.TargetY == nil {
+		step.TargetX, step.TargetY = catalogTargetCoords(catalog, number(payload["city_id"]), number(payload["house_id"]), step.TargetID)
+	}
 	step.Outcome, _ = payload["outcome"].(string)
 	step.RuleState, _ = payload["rule_state"].(string)
 	step.MissingSupport = missingGroups(catalog, number(payload["city_id"]), number(payload["house_id"]), step.TargetID, installed)
