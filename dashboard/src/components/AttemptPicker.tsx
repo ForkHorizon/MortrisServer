@@ -7,15 +7,29 @@ import { ReplayPlayer } from './ReplayPlayer'
 import { Timestamp } from './Timestamp'
 import { outcomeWords } from './houseColors'
 
-type Props = { project: string; city: string; house: string; from: string; to: string; build?: string; blocks: PuzzleHouseBlock[]; label: string; waveIndex?: number | null }
+type Props = {
+  project: string
+  city: string
+  house: string
+  from: string
+  to: string
+  build?: string
+  blocks: PuzzleHouseBlock[]
+  label: string
+  waveIndex?: number | null
+  selectedAttempt?: string
+  onSelectAttempt?: (id: string) => void
+}
 
 // Attempts are listed worst-first rather than newest-first: the reason to
 // open a replay is almost always "show me one that went badly". waveIndex,
 // when set (via the wave tabs or a wave-staircase step — plan section 7,
 // "clicking a step should filter the attempt/run examples below it"),
 // narrows the list to attempts of that one wave.
-export function AttemptPicker({ project, city, house, from, to, build, blocks, label, waveIndex }: Props) {
-  const [selected, setSelected] = useState('')
+export function AttemptPicker({ project, city, house, from, to, build, blocks, label, waveIndex, selectedAttempt, onSelectAttempt }: Props) {
+  const [internalSelected, setInternalSelected] = useState('')
+  const selected = selectedAttempt !== undefined ? selectedAttempt : internalSelected
+  const setSelected = onSelectAttempt ?? setInternalSelected
   const fetchAttempts = useCallback(
     () => apiGet<PuzzleAttemptList>(`/api/v1/analytics/gameplay/houses/${city}/${house}/attempts`, { project, from, to, build: build || undefined }),
     [project, city, house, from, to, build],
@@ -27,17 +41,24 @@ export function AttemptPicker({ project, city, house, from, to, build, blocks, l
   )
   const replay = useApiData<PuzzleReplay | null>(fetchReplay, `puzzle-replay:${project}:${selected}`)
 
-  const scoped = waveIndex != null ? (attempts.data?.attempts ?? []).filter((row) => row.wave_index === waveIndex) : (attempts.data?.attempts ?? [])
+  const scoped = waveIndex != null ? (attempts.data?.attempts ?? []).filter((row) => (row.wave_index <= waveIndex && waveIndex <= row.last_wave_index) || row.wave_index === waveIndex) : (attempts.data?.attempts ?? [])
   const rows = [...scoped].sort((a, b) => b.falls - a.falls || b.active_duration_ms - a.active_duration_ms)
-  if (rows.length === 0) return <p className="muted">{waveIndex != null ? `No attempts on wave ${waveIndex + 1} in this range.` : 'No attempts on this house in this range.'}</p>
+  if (rows.length === 0 && !selected) return <p className="muted">{waveIndex != null ? `No attempts on wave ${waveIndex + 1} in this range.` : 'No attempts on this house in this range.'}</p>
   return (
     <>
-      <AttemptGroup title="Representative failure" attempts={rows.filter((row) => row.falls > 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
-      <AttemptGroup title="Longest or hardest attempt" attempts={rows.filter((row) => row.falls === 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
-      <AttemptGroup title="Completed attempt" attempts={rows.filter((row) => row.completed).slice(0, 1)} selected={selected} onSelect={setSelected} />
-      <details><summary>All {rows.length} attempts</summary><AttemptGroup attempts={rows} selected={selected} onSelect={setSelected} /></details>
-      {selected && replay.data && <ReplayPlayer replay={replay.data} blocks={blocks} label={label} />}
+      {rows.length === 0 ? (
+        <p className="muted">{waveIndex != null ? `No attempts on wave ${waveIndex + 1} in this range.` : 'No attempts on this house in this range.'}</p>
+      ) : (
+        <>
+          <AttemptGroup title="Representative failure" attempts={rows.filter((row) => row.falls > 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
+          <AttemptGroup title="Longest or hardest attempt" attempts={rows.filter((row) => row.falls === 0).slice(0, 1)} selected={selected} onSelect={setSelected} />
+          <AttemptGroup title="Completed attempt" attempts={rows.filter((row) => row.completed).slice(0, 1)} selected={selected} onSelect={setSelected} />
+          <details><summary>All {rows.length} attempts</summary><AttemptGroup attempts={rows} selected={selected} onSelect={setSelected} /></details>
+        </>
+      )}
       {selected && replay.loading && <p className="muted">Loading replay…</p>}
+      {selected && replay.error && <p className="muted">Failed to load replay: {replay.error}</p>}
+      {selected && replay.data && <ReplayPlayer replay={replay.data} blocks={blocks} label={label} />}
     </>
   )
 }

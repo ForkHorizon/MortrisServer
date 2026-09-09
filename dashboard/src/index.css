@@ -522,3 +522,33 @@ details.attempts { margin-top: 1.5rem; }
 /* Support graph key */
 .support-key { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .support-key li { display: flex; align-items: center; gap: 0.45rem; }
+
+/* Stage 5A & 5B: Retry ladder and Time-to-place distribution */
+.retry-ladder-section { margin-top: 1.5rem; }
+.retry-ladder-wrapper { overflow-x: auto; margin-top: 0.5rem; }
+.retry-ladder-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left; }
+.retry-ladder-table th, .retry-ladder-table td { border-bottom: 1px solid var(--border); padding: 0.45rem 0.6rem; }
+.retry-ladder-table th { background: var(--bg-alt); font-weight: 600; white-space: nowrap; }
+.retry-ladder-row { cursor: pointer; transition: background 0.15s ease; }
+.retry-ladder-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.retry-ladder-row:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -1px; }
+.retry-ladder-row--selected { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.retry-ladder-row--selected > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.block-subtext { display: block; font-size: 0.75rem; }
+.percentile-subtext { font-size: 0.78rem; white-space: nowrap; }
+.ladder-badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.ladder-badge--grey { background: var(--bg-alt); border-color: var(--border); color: var(--text-muted); }
+.ladder-badge--amber { background: color-mix(in srgb, #b26500 12%, var(--bg)); border-color: color-mix(in srgb, #b26500 35%, transparent); color: #8a4e00; }
+.ladder-badge--red { background: color-mix(in srgb, var(--danger) 12%, var(--bg)); border-color: color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); }
+.ladder-badge--green { background: color-mix(in srgb, #1b5e20 12%, var(--bg)); border-color: color-mix(in srgb, #1b5e20 35%, transparent); color: #1b5e20; }
+.ladder-badge--blue { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: #1d4ed8; }
+@media (prefers-color-scheme: dark) {
+  .ladder-badge--amber { background: color-mix(in srgb, #f5b041 20%, transparent); border-color: color-mix(in srgb, #f5b041 40%, transparent); color: #f5b041; }
+  .ladder-badge--green { background: color-mix(in srgb, #4caf50 20%, transparent); border-color: color-mix(in srgb, #4caf50 40%, transparent); color: #81c784; }
+  .ladder-badge--blue { background: color-mix(in srgb, var(--accent) 20%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: #93c5fd; }
+}
+.ladder-replay-links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.example-replay-btn { font-size: 0.8rem; padding: 0.1rem 0.25rem; }
+.retry-breakdown { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+.example-replays-block { margin-top: 0.5rem; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+

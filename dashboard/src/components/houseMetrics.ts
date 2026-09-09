@@ -33,14 +33,20 @@ function rate(value: number, sample: number, reliable: boolean, suffix: string):
 function retries(block: PuzzleHouseBlock): MetricReading {
   const sample = block.successful_placements
   const value = block.median_tries_to_success
-  return { value, sample, reliable: sample >= 5, ratio: Math.max(0, Math.min(1, (value - 1) / 3)), label: value ? `${value} median tries to place` : 'no successful placements yet' }
+  const label = sample > 0
+    ? `${value > 0 ? value : 1} median tries to place`
+    : block.placements > 0
+      ? 'no successful placements yet'
+      : 'unplayed'
+  return { value, sample, reliable: sample >= 5, ratio: Math.max(0, Math.min(1, (value - 1) / 3)), label }
 }
 
 function timeToPlace(block: PuzzleHouseBlock): MetricReading {
   const sample = block.time_to_place_samples
   const value = block.median_time_to_place_ms
-  const seconds = Math.round(value / 1000)
-  return { value, sample, reliable: sample >= 5, ratio: Math.max(0, Math.min(1, seconds / 45)), label: value ? `${seconds}s median active time` : 'no timing samples yet' }
+  const seconds = value / 1000
+  const secText = seconds < 1 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`
+  return { value, sample, reliable: sample >= 5, ratio: Math.max(0, Math.min(1, seconds / 45)), label: sample > 0 ? `${secText} median active time` : 'no timing samples yet' }
 }
 
 export function metricTitle(metric: HouseMetric): string {

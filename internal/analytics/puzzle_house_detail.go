@@ -32,19 +32,52 @@ type PuzzleHouseBlock struct {
 	// them to plain language.
 	FallsByReason map[string]int64 `json:"falls_by_reason"`
 	// RateIsReliable is false below minPlacementsForRate — see its comment.
-	RateIsReliable       bool    `json:"rate_is_reliable"`
-	FirstTryFailures     int64   `json:"first_try_failures"`
-	FirstTryAttempts     int64   `json:"first_try_attempts"`
-	FirstTryFailureRate  float64 `json:"first_try_failure_rate"`
-	FirstTryReliable     bool    `json:"first_try_reliable"`
-	NoSnapRate           float64 `json:"no_snap_rate"`
-	MissingSupportRate   float64 `json:"missing_support_rate"`
-	HintPressureCount    int64   `json:"hint_pressure_count"`
-	HintPressureRate     float64 `json:"hint_pressure_rate"`
-	MedianTriesToSuccess int     `json:"median_tries_to_success"`
-	SuccessfulPlacements int64   `json:"successful_placements"`
-	MedianTimeToPlaceMS  int64   `json:"median_time_to_place_ms"`
-	TimeToPlaceSamples   int64   `json:"time_to_place_samples"`
+	RateIsReliable       bool                          `json:"rate_is_reliable"`
+	FirstTryFailures     int64                         `json:"first_try_failures"`
+	FirstTryAttempts     int64                         `json:"first_try_attempts"`
+	FirstTryFailureRate  float64                       `json:"first_try_failure_rate"`
+	FirstTryReliable     bool                          `json:"first_try_reliable"`
+	NoSnapRate           float64                       `json:"no_snap_rate"`
+	MissingSupportRate   float64                       `json:"missing_support_rate"`
+	HintPressureCount    int64                         `json:"hint_pressure_count"`
+	HintPressureRate     float64                       `json:"hint_pressure_rate"`
+	MedianTriesToSuccess int                           `json:"median_tries_to_success"`
+	SuccessfulPlacements int64                         `json:"successful_placements"`
+	MedianTimeToPlaceMS  int64                         `json:"median_time_to_place_ms"`
+	TimeToPlaceSamples   int64                         `json:"time_to_place_samples"`
+	RetryLadder          PuzzleRetryLadder             `json:"retry_ladder"`
+	TimeToPlace          PuzzleTimeToPlaceDistribution `json:"time_to_place"`
+}
+
+// PuzzleRetryLadder models the Stage 5A retry distribution for one block:
+// how many chains succeeded on the 1st, 2nd, 3rd, or 4th+ try, how many
+// never succeeded in the observed wave attempt, median and p75/p90 percentiles,
+// and example replay attempt IDs.
+type PuzzleRetryLadder struct {
+	Success1stTry     int64    `json:"success_1st_try"`
+	Success2ndTry     int64    `json:"success_2nd_try"`
+	Success3rdTry     int64    `json:"success_3rd_try"`
+	Success4thPlusTry int64    `json:"success_4th_plus_try"`
+	NeverSucceeded    int64    `json:"never_succeeded"`
+	SampleCount       int64    `json:"sample_count"`
+	MedianTries       int      `json:"median_tries"`
+	P75Tries          int      `json:"p75_tries"`
+	P90Tries          int      `json:"p90_tries"`
+	Reliable          bool     `json:"reliable"`
+	ExampleAttemptIDs []string `json:"example_attempt_ids,omitempty"`
+}
+
+// PuzzleTimeToPlaceDistribution models the Stage 5B duration distribution
+// from detail_taken to terminal placement_resolved using active_elapsed_ms
+// (excluding background spans), reporting median, p75/p90, and separating
+// incomplete/abandoned interactions.
+type PuzzleTimeToPlaceDistribution struct {
+	SampleCount            int64 `json:"sample_count"`
+	MedianMS               int64 `json:"median_ms"`
+	P75MS                  int64 `json:"p75_ms"`
+	P90MS                  int64 `json:"p90_ms"`
+	IncompleteInteractions int64 `json:"incomplete_interactions"`
+	Reliable               bool  `json:"reliable"`
 }
 
 type PuzzleHouseDetail struct {

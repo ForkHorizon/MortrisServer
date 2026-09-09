@@ -170,7 +170,7 @@ func (s *Server) handlePuzzleAttempts(w http.ResponseWriter, r *http.Request, se
 		s.fail(w, r, requestID, start, err)
 		return
 	}
-	result, err := analytics.GetPuzzleAttempts(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to)
+	result, err := analytics.GetPuzzleAttempts(r.Context(), s.ReaderPool, projectID, cityID, houseID, from, to, puzzleBuild(r))
 	if err != nil {
 		s.fail(w, r, requestID, start, err)
 		return

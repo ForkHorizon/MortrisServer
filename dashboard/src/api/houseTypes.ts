@@ -33,6 +33,31 @@ export interface PuzzleHouseBlock {
   successful_placements: number
   median_time_to_place_ms: number
   time_to_place_samples: number
+  retry_ladder?: PuzzleRetryLadder
+  time_to_place?: PuzzleTimeToPlaceDistribution
+}
+
+export interface PuzzleRetryLadder {
+  success_1st_try: number
+  success_2nd_try: number
+  success_3rd_try: number
+  success_4th_plus_try: number
+  never_succeeded: number
+  sample_count: number
+  median_tries: number
+  p75_tries: number
+  p90_tries: number
+  reliable: boolean
+  example_attempt_ids?: string[]
+}
+
+export interface PuzzleTimeToPlaceDistribution {
+  sample_count: number
+  median_ms: number
+  p75_ms: number
+  p90_ms: number
+  incomplete_interactions: number
+  reliable: boolean
 }
 
 export interface PuzzleWaveSummary {

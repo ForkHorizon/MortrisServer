@@ -73,6 +73,7 @@ export function HouseDetailPage() {
       <TesterImpactPanel impact={testerImpact.data} />
       {detail.data && (
         <HouseBody
+          key={`${city}:${house}`}
           detail={detail.data}
           project={currentProject}
           city={city ?? ''}
