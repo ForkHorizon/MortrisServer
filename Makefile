@@ -21,6 +21,7 @@ lint: dashboard/dist/index.html
 
 test: dashboard/dist/index.html
 	go test ./...
+	cd dashboard && npm test
 
 # Builds the real Vite frontend into dashboard/dist, which Go embeds
 # (dashboard/embed.go, section 13.1).

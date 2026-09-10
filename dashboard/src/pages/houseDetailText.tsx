@@ -1,5 +1,36 @@
 import type { PuzzleDropMap, PuzzleHouseBlock } from '../api/houseTypes'
 import { percent } from '../components/houseColors'
+import { diagnoseDetail, toneLabel, type DiagnosisTone } from '../components/detailDiagnosis'
+
+export { detailDiagnosis, detailDiagnosisTone, leadingFallReason } from '../components/detailDiagnosis'
+export type { DiagnosisTone }
+
+export function DetailDiagnosisBanner({ block }: { block: PuzzleHouseBlock }) {
+  const { sentence, tone } = diagnoseDetail(block)
+  const badgeText = toneLabel(tone)
+
+  return (
+    <section
+      className={`detail-diagnosis-banner detail-diagnosis-banner--${tone}`}
+      aria-labelledby={`detail-${block.block_id}-diagnosis-heading`}
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="detail-diagnosis-banner-head">
+        <h3
+          id={`detail-${block.block_id}-diagnosis-heading`}
+          className="detail-diagnosis-header"
+        >
+          Diagnosis
+        </h3>
+        <span className={`diagnosis-badge diagnosis-badge--${tone}`}>
+          {badgeText}
+        </span>
+      </div>
+      <p className="detail-diagnosis-sentence">{sentence}</p>
+    </section>
+  )
+}
 
 export function houseVerdict(worst: PuzzleHouseBlock | undefined): string {
   return worst
