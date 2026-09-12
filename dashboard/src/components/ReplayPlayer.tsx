@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PuzzleHouseBlock, PuzzleReplay, PuzzleReplayStep } from '../api/houseTypes'
 import { HouseCanvas } from './HouseCanvas'
+import { PacingBand } from './PacingBand'
 import { outcomeWords } from './houseColors'
 
 const STEP_MS = 900
@@ -12,19 +13,10 @@ function missingBlocks(step: PuzzleReplayStep): number[] {
   return [...new Set((step.missing_support ?? []).flat())]
 }
 
-function stepSentence(step: PuzzleReplayStep): string {
-  if (step.name === 'detail_taken') return `Picked up detail ${step.block_id}.`
-  if (step.name === 'detail_released') return `Released detail ${step.block_id}${step.target_id >= 0 ? ` toward slot ${step.target_id}` : ''}.`
-  if (step.name === 'detail_returned') return `Detail ${step.block_id} returned to inventory.`
-  if (step.name === 'interaction_abandoned') {
-    return step.block_id >= 0
-      ? `Detail ${step.block_id} was abandoned.`
-      : 'Detail placement was abandoned.'
-  }
+function developerStepSentence(step: PuzzleReplayStep): string {
   if (step.name === 'developer_command_started') {
-    return step.developer_action_id
-      ? `Tester initiated developer command: ${step.developer_action_id.replace(/_/g, ' ')}.`
-      : 'Tester initiated a developer command.'
+    const cmd = step.developer_command || step.developer_action_id
+    return cmd ? `Tester initiated developer command: ${cmd.replace(/_/g, ' ')}.` : 'Tester initiated a developer command.'
   }
   if (step.name === 'developer_command_completed') return 'Developer command completed.'
   if (step.name === 'developer_command_failed') return 'Developer command failed.'
@@ -32,6 +24,18 @@ function stepSentence(step: PuzzleReplayStep): string {
   if (step.name === 'developer_menu_opened') return 'Tester opened the developer menu.'
   if (step.name === 'developer_menu_closed') return 'Tester closed the developer menu.'
   if (step.name === 'developer_progress_mutated') return 'House progress was modified by a developer command.'
+  return ''
+}
+
+function stepSentence(step: PuzzleReplayStep): string {
+  if (step.name === 'detail_taken') return `Picked up detail ${step.block_id}.`
+  if (step.name === 'detail_released') return `Released detail ${step.block_id}${step.target_id >= 0 ? ` toward slot ${step.target_id}` : ''}.`
+  if (step.name === 'detail_returned') return `Detail ${step.block_id} returned to inventory.`
+  if (step.name === 'interaction_abandoned') {
+    return step.block_id >= 0 ? `Detail ${step.block_id} was abandoned.` : 'Detail placement was abandoned.'
+  }
+  const devSentence = developerStepSentence(step)
+  if (devSentence) return devSentence
 
   if (step.name !== 'placement_resolved') return eventWords(step.name)
   if (step.outcome === 'placed') return `Detail ${step.block_id} went in.`
@@ -112,12 +116,11 @@ function ReplayControls({ index, last, total, playing, setPlaying, setIndex }: C
   )
 }
 
-export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; blocks: PuzzleHouseBlock[]; label: string }) {
+function useReplayPlayback(attemptId: string, last: number) {
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const last = replay.steps.length - 1
 
-  useEffect(() => setIndex(0), [replay.attempt_id])
+  useEffect(() => setIndex(0), [attemptId])
   useEffect(() => {
     if (!playing) return
     if (index >= last) {
@@ -128,36 +131,71 @@ export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; 
     return () => clearTimeout(timer)
   }, [playing, index, last])
 
-  const step = replay.steps[index]
+  return { index, setIndex, playing, setPlaying }
+}
+
+function ReplayWarnings({ replay, step }: { replay: PuzzleReplay; step: PuzzleReplayStep }) {
+  return (
+    <>
+      {step.progress_origin && step.progress_origin !== 'natural' && (
+        <p className="muted">Tester progress: {step.progress_origin.replace(/_/g, ' ')}.</p>
+      )}
+      {(replay.sequence_gaps > 0 || replay.sequence_duplicates > 0 || replay.orphan_interactions > 0 || replay.state_hash_mismatches > 0) && (
+        <p className="warning">
+          Telemetry integrity: {replay.sequence_gaps} missing, {replay.sequence_duplicates} duplicate,{' '}
+          {replay.orphan_interactions} unfinished interactions, {replay.state_hash_mismatches} state mismatches.
+        </p>
+      )}
+      {replay.revision_warning && <p className="warning">{replay.revision_warning}</p>}
+      {step.active_elapsed_ms >= 0 && <p className="muted">{Math.round(step.active_elapsed_ms / 1000)}s of active play into this attempt.</p>}
+    </>
+  )
+}
+
+function ReplayCanvas({ blocks, label, step, currentIndex }: {
+  blocks: PuzzleHouseBlock[]
+  label: string
+  step: PuzzleReplayStep
+  currentIndex: number
+}) {
+  const replayRelease = step.name === 'detail_released' || step.name === 'placement_resolved'
+    ? { x: step.release_x_milli, y: step.release_y_milli, targetX: step.target_x_milli, targetY: step.target_y_milli, targetID: step.target_id }
+    : null
+  return (
+    <HouseCanvas
+      blocks={blocks}
+      interactive={false}
+      title={`${label}, attempt replay at step ${currentIndex + 1}`}
+      placed={new Set(step.placed)}
+      active={step.block_id >= 0 ? step.block_id : null}
+      missing={new Set(missingBlocks(step))}
+      replayRelease={replayRelease}
+    />
+  )
+}
+
+export function ReplayPlayer({ replay, blocks, label }: { replay: PuzzleReplay; blocks: PuzzleHouseBlock[]; label: string }) {
+  const last = Math.max(0, replay.steps.length - 1)
+  const { index, setIndex, playing, setPlaying } = useReplayPlayback(replay.attempt_id, last)
+  const currentIndex = Math.min(index, last)
+
+  const step = replay.steps[currentIndex]
   if (!step) return <p className="muted">This attempt has no steps to replay.</p>
   return (
     <div className="replay">
-      <HouseCanvas
-        blocks={blocks}
-        interactive={false}
-        title={`${label}, attempt replay at step ${index + 1}`}
-        placed={new Set(step.placed)}
-        active={step.block_id >= 0 ? step.block_id : null}
-        missing={new Set(missingBlocks(step))}
-        replayRelease={
-          step.name === 'detail_released' || step.name === 'placement_resolved'
-            ? {
-                x: step.release_x_milli,
-                y: step.release_y_milli,
-                targetX: step.target_x_milli,
-                targetY: step.target_y_milli,
-                targetID: step.target_id,
-              }
-            : null
-        }
-      />
+      <ReplayCanvas blocks={blocks} label={label} step={step} currentIndex={currentIndex} />
       <p className="verdict">{stepSentence(step)}</p>
-      {step.progress_origin && step.progress_origin !== 'natural' && <p className="muted">Tester progress: {step.progress_origin.replace(/_/g, ' ')}.</p>}
-      {(replay.sequence_gaps > 0 || replay.sequence_duplicates > 0 || replay.orphan_interactions > 0 || replay.state_hash_mismatches > 0) && <p className="warning">Telemetry integrity: {replay.sequence_gaps} missing, {replay.sequence_duplicates} duplicate, {replay.orphan_interactions} unfinished interactions, {replay.state_hash_mismatches} state mismatches.</p>}
-      {replay.revision_warning && <p className="warning">{replay.revision_warning}</p>}
-      {step.active_elapsed_ms >= 0 && <p className="muted">{Math.round(step.active_elapsed_ms / 1000)}s of active play into this attempt.</p>}
+      <ReplayWarnings replay={replay} step={step} />
+      <PacingBand
+        replay={replay}
+        currentIndex={currentIndex}
+        onSelectStep={(i) => {
+          setPlaying(false)
+          setIndex(() => i)
+        }}
+      />
       <ReplayControls
-        index={index}
+        index={currentIndex}
         last={last}
         total={replay.steps.length}
         playing={playing}

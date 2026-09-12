@@ -519,6 +519,59 @@ th {
 .attempt-list button[aria-pressed='true'] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 details.attempts { margin-top: 1.5rem; }
 
+/* Stage 5C: Attempt pacing band */
+.pacing-band-container { margin: 1rem 0; padding: 0.85rem; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 0.6rem; }
+.pacing-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.pacing-summary-title { display: flex; align-items: baseline; gap: 0.6rem; font-size: 0.88rem; }
+.pacing-track { position: relative; height: 48px; background: color-mix(in srgb, var(--border) 25%, var(--bg)); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; user-select: none; touch-action: none; }
+.pacing-track:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 2px; }
+.pacing-spans-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 5px; }
+.pacing-span { position: absolute; top: 0; bottom: 0; }
+.pacing-span--active { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.pacing-span--paused { background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.22), rgba(128, 128, 128, 0.22) 6px, transparent 6px, transparent 12px); border-left: 1px dashed var(--border); border-right: 1px dashed var(--border); display: flex; align-items: center; justify-content: center; }
+.pacing-pause-label { font-size: 0.75rem; opacity: 0.65; color: var(--text-muted); }
+.pacing-waves-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 5px; }
+.pacing-wave-boundary { position: absolute; top: 0; bottom: 0; width: 1px; border-left: 1px dashed var(--border); z-index: 2; }
+.pacing-wave-tag { position: absolute; top: 2px; left: 3px; font-size: 0.65rem; padding: 0.05rem 0.25rem; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.pacing-interactions-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 5px; }
+.pacing-interaction { position: absolute; top: 22px; height: 6px; border-radius: 3px; z-index: 3; }
+.pacing-interaction--complete { background: var(--success, #2e7d32); opacity: 0.6; }
+.pacing-interaction--fail { background: repeating-linear-gradient(45deg, #c62828, #c62828 3px, #8e0000 3px, #8e0000 6px); opacity: 0.85; }
+.pacing-interaction--active { opacity: 0.95; height: 8px; top: 21px; box-shadow: 0 0 4px var(--accent); }
+.pacing-markers-layer { position: absolute; inset: 0; pointer-events: none; }
+.pacing-marker { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; line-height: 1; border: 1.5px solid var(--bg); cursor: pointer; z-index: 4; transition: transform 0.1s ease, filter 0.1s ease; background: var(--bg-alt); color: var(--text); pointer-events: auto; touch-action: none; }
+.pacing-marker:hover { transform: translate(-50%, -50%) scale(1.3); z-index: 8; filter: drop-shadow(0 0 2px var(--accent)); }
+.pacing-marker--current { transform: translate(-50%, -50%) scale(1.25); z-index: 7; filter: drop-shadow(0 0 3px var(--accent)); }
+.pacing-marker--success { background: #1b5e20; color: #ffffff; }
+.pacing-marker--circle { border-radius: 50%; }
+.pacing-marker--fall_missing_support { background: #c62828; color: #ffffff; clip-path: polygon(50% 100%, 0 0, 100% 0); width: 20px; height: 20px; filter: drop-shadow(0 0 1px var(--bg)); }
+.pacing-marker--fell_no_snap_target { background: #bf360c; color: #ffffff; clip-path: polygon(50% 0, 0 100%, 100% 100%); width: 20px; height: 20px; filter: drop-shadow(0 0 1px var(--bg)); }
+.pacing-marker--fall_other { background: #ad1457; color: #ffffff; clip-path: polygon(50% 100%, 0 0, 100% 0); width: 20px; height: 20px; filter: drop-shadow(0 0 1px var(--bg)); }
+.pacing-marker--hint { background: #0277bd; color: #ffffff; border-radius: 3px; transform: translate(-50%, -50%) rotate(45deg); }
+.pacing-marker--hint.pacing-marker--current { transform: translate(-50%, -50%) rotate(45deg) scale(1.25); }
+.pacing-marker--hint:hover { transform: translate(-50%, -50%) rotate(45deg) scale(1.3); }
+.pacing-marker--hint .pacing-marker-icon { transform: rotate(-45deg); display: inline-block; }
+.pacing-marker--checkpoint { background: #455a64; color: #ffffff; border-radius: 3px; }
+.pacing-marker--recovery { background: #00695c; color: #ffffff; border-radius: 3px; }
+.pacing-marker--developer { background: #6a1b9a; color: #ffffff; border-radius: 4px; }
+.pacing-marker--take, .pacing-marker--release, .pacing-marker--generic, .pacing-marker--dot { width: 10px; height: 10px; background: var(--text-muted); opacity: 0.8; border-color: var(--border); }
+.pacing-marker--dot .pacing-marker-icon { display: none; }
+.pacing-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); z-index: 6; pointer-events: none; transform: translateX(-50%); }
+.pacing-playhead-cap { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--accent); }
+.pacing-tooltip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem; font-size: 0.82rem; min-height: 1.4rem; max-width: 100%; padding: 0.2rem 0.4rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+.pacing-tooltip-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.pacing-tooltip-badge { font-weight: 600; color: var(--accent); flex-shrink: 0; }
+.pacing-tooltip-outcome { font-weight: 500; flex-shrink: 0; }
+.pacing-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.76rem; color: var(--text-muted); padding-top: 0.2rem; }
+.pacing-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.pacing-legend-item .pacing-marker { position: static; transform: none; width: 16px; height: 16px; font-size: 0.6rem; pointer-events: none; }
+.pacing-legend-item .pacing-marker--hint { transform: rotate(45deg); }
+.pacing-legend-item .pacing-marker--hint .pacing-marker-icon { transform: rotate(-45deg); display: inline-block; }
+.pacing-legend-bar { width: 20px; height: 5px; border-radius: 2px; display: inline-block; }
+.pacing-legend-bar--complete { background: var(--success, #2e7d32); }
+.pacing-legend-bar--fail { background: repeating-linear-gradient(45deg, #c62828, #c62828 2px, #8e0000 2px, #8e0000 4px); }
+.pacing-legend-pause-swatch { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 16px; border: 1px dashed var(--border); background: repeating-linear-gradient(45deg, rgba(120, 120, 120, 0.2), rgba(120, 120, 120, 0.2) 3px, transparent 3px, transparent 6px); font-size: 0.65rem; }
+
 /* Support graph key */
 .support-key { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .support-key li { display: flex; align-items: center; gap: 0.45rem; }

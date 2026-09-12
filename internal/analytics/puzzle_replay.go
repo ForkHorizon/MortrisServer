@@ -35,6 +35,7 @@ type PuzzleReplayStep struct {
 	Origin            string    `json:"origin,omitempty"`
 	ProgressOrigin    string    `json:"progress_origin,omitempty"`
 	DeveloperActionID string    `json:"developer_action_id,omitempty"`
+	DeveloperCommand  string    `json:"developer_command,omitempty"`
 	// Placed is the house state after this step, so a scrubber can render
 	// any step without replaying the ones before it.
 	Placed []int `json:"placed"`
@@ -142,6 +143,7 @@ func buildReplay(attemptID string, raw *GameplayAttempt, catalog PuzzleCatalog) 
 		step.Origin, _ = payload["origin"].(string)
 		step.ProgressOrigin, _ = payload["progress_origin"].(string)
 		step.DeveloperActionID, _ = payload["developer_action_id"].(string)
+		step.DeveloperCommand, _ = payload["developer_command"].(string)
 		updateReplayInteraction(openInteractions, step)
 		installed = applyReplayEvent(replay, &step, catalog, installed, payload)
 		step.Placed = sortedBlockIDs(installed)
@@ -217,14 +219,14 @@ func updateReplayInteraction(open map[string]bool, step PuzzleReplayStep) {
 	}
 	if step.Name == "detail_taken" {
 		open[step.InteractionID] = true
-	} else if step.Name == "detail_returned" || step.Name == "interaction_abandoned" || step.Name == "placement_resolved" && step.Outcome == "placed" {
+	} else if step.Name == "detail_returned" || step.Name == "interaction_abandoned" || step.Name == "placement_resolved" {
 		delete(open, step.InteractionID)
 	}
 }
 
 func applyReplayEvent(replay *PuzzleReplay, step *PuzzleReplayStep, catalog PuzzleCatalog, installed map[int]bool, payload map[string]any) map[int]bool {
 	if step.Name == "placement_resolved" {
-		return applyReplayPlacement(step, catalog, installed, payload)
+		return applyReplayPlacement(replay, step, catalog, installed, payload)
 	}
 	if step.Name != "state_checkpoint" {
 		return installed
@@ -241,7 +243,7 @@ func applyReplayEvent(replay *PuzzleReplay, step *PuzzleReplayStep, catalog Puzz
 
 // applyReplayPlacement mirrors applyPlacementState but records the block,
 // target and verdict on the step rather than only the missing groups.
-func applyReplayPlacement(step *PuzzleReplayStep, catalog PuzzleCatalog, installed map[int]bool, payload map[string]any) map[int]bool {
+func applyReplayPlacement(replay *PuzzleReplay, step *PuzzleReplayStep, catalog PuzzleCatalog, installed map[int]bool, payload map[string]any) map[int]bool {
 	// The client omits placed_block_ids when it would exceed the property
 	// limit, in which case the running set carried from earlier steps is
 	// the only record of what was standing.
@@ -250,12 +252,20 @@ func applyReplayPlacement(step *PuzzleReplayStep, catalog PuzzleCatalog, install
 	}
 	step.BlockID = number(payload["block_id"])
 	step.TargetID = number(payload["candidate_target_id"])
+	cityID := number(payload["city_id"])
+	if cityID < 0 {
+		cityID = replay.CityID
+	}
+	houseID := number(payload["house_id"])
+	if houseID < 0 {
+		houseID = replay.HouseID
+	}
 	if step.TargetX == nil || step.TargetY == nil {
-		step.TargetX, step.TargetY = catalogTargetCoords(catalog, number(payload["city_id"]), number(payload["house_id"]), step.TargetID)
+		step.TargetX, step.TargetY = catalogTargetCoords(catalog, cityID, houseID, step.TargetID)
 	}
 	step.Outcome, _ = payload["outcome"].(string)
 	step.RuleState, _ = payload["rule_state"].(string)
-	step.MissingSupport = missingGroups(catalog, number(payload["city_id"]), number(payload["house_id"]), step.TargetID, installed)
+	step.MissingSupport = missingGroups(catalog, cityID, houseID, step.TargetID, installed)
 	switch step.Outcome {
 	case "placed":
 		installed[step.BlockID] = true
@@ -275,66 +285,4 @@ func sortedBlockIDs(set map[int]bool) []int {
 	}
 	sort.Ints(keys)
 	return keys
-}
-
-// PuzzleAttemptSummary is one row of the attempt picker.
-type PuzzleAttemptSummary struct {
-	AttemptID         string    `json:"attempt_id"`
-	InstallID         string    `json:"install_id"`
-	StartedAt         time.Time `json:"started_at"`
-	WaveIndex         int       `json:"wave_index"`
-	Placements        int64     `json:"placements"`
-	Falls             int64     `json:"falls"`
-	Hints             int64     `json:"hints"`
-	Completed         bool      `json:"completed"`
-	AppVersion        string    `json:"app_version"`
-	BuildNumber       string    `json:"build_number"`
-	ActiveDurationMS  int64     `json:"active_duration_ms"`
-	LastWaveIndex     int       `json:"last_wave_index"`
-	DominantFailure   string    `json:"dominant_failure"`
-	ProgressOrigin    string    `json:"progress_origin"`
-	DeveloperAffected bool      `json:"developer_affected"`
-}
-
-func GetPuzzleAttempts(ctx context.Context, pool *pgxpool.Pool, projectID string, cityID, houseID int, from, to time.Time, build ...*string) ([]PuzzleAttemptSummary, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-	rows, err := pool.Query(ctx, `
-SELECT properties->>'attempt_id', MIN(install_id::text),
-       MIN(effective_at),
-       MIN((properties->>'wave_index')::int),
-       COUNT(*) FILTER (WHERE name='placement_resolved'),
-       COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),
-       COUNT(*) FILTER (WHERE name='hint_used'),
-       BOOL_OR(name IN ('wave_completed','house_completed')),
-       (array_agg(app_version ORDER BY effective_at DESC))[1],
-       (array_agg(build_number ORDER BY effective_at DESC))[1],
-       MAX(COALESCE((properties->>'active_elapsed_ms')::bigint,0)) - MIN(COALESCE((properties->>'active_elapsed_ms')::bigint,0)),
-       MAX(COALESCE((properties->>'wave_index')::int,0)),
-       COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),''),
-       COALESCE((array_agg(properties->>'progress_origin' ORDER BY effective_at DESC) FILTER (WHERE properties ? 'progress_origin'))[1],'natural'),
-       COALESCE(BOOL_OR(properties->>'origin'='developer_menu' OR properties->>'close_reason'='developer_command'),false)
-FROM events
-WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
-	  AND ($6::text IS NULL OR build_number=$6)
-  AND properties ? 'attempt_id'
-  AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
-GROUP BY 1
-ORDER BY MIN(effective_at) DESC
-LIMIT 200`, projectID, cityID, houseID, from, to, optionalBuild(build))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []PuzzleAttemptSummary{}
-	for rows.Next() {
-		var row PuzzleAttemptSummary
-		if err := rows.Scan(&row.AttemptID, &row.InstallID, &row.StartedAt, &row.WaveIndex,
-			&row.Placements, &row.Falls, &row.Hints, &row.Completed, &row.AppVersion, &row.BuildNumber,
-			&row.ActiveDurationMS, &row.LastWaveIndex, &row.DominantFailure, &row.ProgressOrigin, &row.DeveloperAffected); err != nil {
-			return nil, err
-		}
-		result = append(result, row)
-	}
-	return result, rows.Err()
 }

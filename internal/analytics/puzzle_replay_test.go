@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func replayEvent(name string, payload map[string]any) GameplayAttemptEvent {
@@ -213,5 +216,69 @@ func TestLoadReplayCatalogRejectsUnknownCurrentRevision(t *testing.T) {
 	projectID := seedProject(t, pool, false)
 	if _, _, err := loadReplayCatalog(context.Background(), pool, projectID, "not-imported", false); err == nil {
 		t.Fatal("schema-v2 revision mismatch must not silently use the newest catalogue")
+	}
+}
+
+func TestReplayCarriesDeveloperCommand(t *testing.T) {
+	raw := &GameplayAttempt{Events: []GameplayAttemptEvent{
+		replayEvent("developer_command_started", map[string]any{
+			"city_id": 1.0, "house_id": 2.0, "origin": "developer_menu",
+			"developer_action_id": "act-1", "developer_command": "CompleteHouse99",
+		}),
+	}}
+	replay := buildReplay("a", raw, testCatalog())
+	if len(replay.Steps) != 1 {
+		t.Fatalf("steps = %d, want 1", len(replay.Steps))
+	}
+	if replay.Steps[0].DeveloperCommand != "CompleteHouse99" {
+		t.Fatalf("developer_command = %q, want CompleteHouse99", replay.Steps[0].DeveloperCommand)
+	}
+	if replay.Steps[0].DeveloperActionID != "act-1" {
+		t.Fatalf("developer_action_id = %q, want act-1", replay.Steps[0].DeveloperActionID)
+	}
+}
+
+func seedOverflowTestEvents(t *testing.T, pool *pgxpool.Pool, projectID, installID string, now time.Time) {
+	seedEvents(t, pool, projectID, []seedEvent{
+		{
+			EventID: "a1111111-1111-4111-8111-111111111111", InstallID: installID, SessionID: "s1", Sequence: 1,
+			Name: "wave_started", Kind: "product", EffectiveAt: now,
+			Properties: map[string]any{"attempt_id": "attempt-overflow", "city_id": 1, "house_id": 1, "wave_index": "99999999999999999999999999", "active_elapsed_ms": "99999999999999999999999999"},
+		},
+		{
+			EventID: "a2222222-2222-4222-8222-222222222222", InstallID: installID, SessionID: "s1", Sequence: 2,
+			Name: "wave_started", Kind: "product", EffectiveAt: now.Add(time.Second),
+			Properties: map[string]any{"attempt_id": "", "city_id": 1, "house_id": 1},
+		},
+		{
+			EventID: "a3333333-3333-4333-8333-333333333333", InstallID: installID, SessionID: "s1", Sequence: 3,
+			Name: "wave_started", Kind: "product", EffectiveAt: now.Add(2 * time.Second),
+			Properties: map[string]any{"attempt_id": "attempt-valid", "city_id": 1, "house_id": 1, "wave_index": 1, "active_elapsed_ms": 5000},
+		},
+	})
+}
+
+func TestGetPuzzleAttempts_SafelyFiltersOverflowValuesAndEmptyAttemptID(t *testing.T) {
+	pool := testPool(t)
+	projectID := seedProject(t, pool, false)
+	now := time.Now().UTC().Truncate(time.Second)
+	installID := "88888888-8888-4888-8888-888888888888"
+	seedInstallation(t, pool, projectID, installID, &now)
+	seedOverflowTestEvents(t, pool, projectID, installID, now)
+
+	attempts, err := GetPuzzleAttempts(context.Background(), pool, projectID, 1, 1, now.Add(-time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("GetPuzzleAttempts failed on overflow values: %v", err)
+	}
+	if len(attempts) != 2 {
+		t.Fatalf("attempts count = %d, want 2", len(attempts))
+	}
+	for _, a := range attempts {
+		if a.AttemptID == "" {
+			t.Errorf("empty attempt_id should have been filtered out")
+		}
+		if a.AttemptID == "attempt-overflow" && (a.WaveIndex != 0 || a.ActiveDurationMS != 0) {
+			t.Errorf("overflow attempt fields corrupted: wave_index=%d, active_ms=%d", a.WaveIndex, a.ActiveDurationMS)
+		}
 	}
 }

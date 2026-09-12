@@ -177,6 +177,7 @@ export interface PuzzleReplayStep {
   origin?: string
   progress_origin?: string
   developer_action_id?: string
+  developer_command?: string
   placed: number[]
   missing_support?: number[][]
 }
