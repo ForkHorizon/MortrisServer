@@ -48,6 +48,7 @@ export function HouseStage(p: StageProps) {
           support={p.showSupport && p.selectedBlock ? { targetBlockID: p.selectedBlock.block_id, groups: p.selectedBlock.required_groups } : null}
           metric={p.metric}
           title={`${p.label}, coloured by ${metricTitle(p.metric).toLowerCase()}`}
+          onSelectAttempt={p.onSelectAttempt}
         />
         <p className="muted">Click any detail to inspect it. Grey means ground, or too few tries to judge.</p>
       </div>

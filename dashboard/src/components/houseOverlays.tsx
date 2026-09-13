@@ -1,4 +1,6 @@
 import type { PuzzleDrop, PuzzleHouseBlock } from '../api/houseTypes'
+import type { DropCluster } from './dropClustering'
+import { DropLayer } from './DropLayer'
 import { supportColor } from './houseColors'
 
 // Overlays drawn over the house: where players let go, and which details
@@ -7,53 +9,40 @@ import { supportColor } from './houseColors'
 
 export type Support = { targetBlockID: number; groups: number[][] }
 
-// Outcome colours for drop dots. Deliberately not the fall-rate ramp:
-// these encode *what happened*, not *how bad it is*, and reusing the ramp
-// would suggest an ordering between reasons that does not exist.
-const DROP_COLOR: Record<string, string> = {
-  placed: '#5aa96b',
-  fell_no_snap_target: '#e8a33d',
-  fell_missing_support: '#d94f4f',
-  fell_missing_rule: '#b06fd0',
-}
+export { DropLayer } from './DropLayer'
 
-type DropLayerProps = { drops: PuzzleDrop[]; scale: number }
-
-// Each dot is where a player let go; the line runs to the slot they were
-// aiming at. The line is what turns a cloud of dots into a direction —
-// "everyone releases below the slot" is invisible without it.
-export function DropLayer({ drops, scale }: DropLayerProps) {
+export function CanvasOverlays(p: {
+  blocks: PuzzleHouseBlock[]
+  scale: number
+  support?: Support | null
+  replayRelease?: {
+    x?: number | null
+    y?: number | null
+    targetX?: number | null
+    targetY?: number | null
+    targetID?: number | null
+  } | null
+  drops?: PuzzleDrop[]
+  activeDrop?: PuzzleDrop | null
+  activeCluster?: DropCluster | null
+  onSelectDrop?: (drop: PuzzleDrop | null) => void
+  onSelectCluster?: (cluster: DropCluster | null) => void
+}) {
   return (
-    <g aria-hidden="true">
-      {drops.map((drop, i) => {
-        const color = DROP_COLOR[drop.outcome] ?? '#9aa1ad'
-        const hasTarget = drop.target_id >= 0
-        return (
-          <g key={`${drop.attempt_id}-${drop.block_id}-${i}`}>
-            {hasTarget && (
-              <line
-                x1={drop.release_x_milli}
-                y1={-drop.release_y_milli}
-                x2={drop.target_x_milli}
-                y2={-drop.target_y_milli}
-                stroke={color}
-                strokeWidth={scale * 0.5}
-                strokeOpacity={0.55}
-              />
-            )}
-            <circle
-              cx={drop.release_x_milli}
-              cy={-drop.release_y_milli}
-              r={scale * 2}
-              fill={color}
-              fillOpacity={0.9}
-              stroke="#0b0d10"
-              strokeWidth={scale * 0.3}
-            />
-          </g>
-        )
-      })}
-    </g>
+    <>
+      {p.support && <SupportLayer blocks={p.blocks} support={p.support} scale={p.scale} />}
+      {p.replayRelease && <ReplayArrow blocks={p.blocks} release={p.replayRelease} scale={p.scale} />}
+      {p.drops && p.drops.length > 0 && (
+        <DropLayer
+          drops={p.drops}
+          scale={p.scale}
+          activeDrop={p.activeDrop}
+          activeCluster={p.activeCluster}
+          onSelectDrop={p.onSelectDrop}
+          onSelectCluster={p.onSelectCluster}
+        />
+      )}
+    </>
   )
 }
 
@@ -100,5 +89,43 @@ export function SupportLayer({ blocks, support, scale }: { blocks: PuzzleHouseBl
         }),
       )}
     </g>
+  )
+}
+
+export function ReplayArrow({
+  blocks,
+  release,
+  scale,
+}: {
+  blocks: PuzzleHouseBlock[]
+  release: {
+    x?: number | null
+    y?: number | null
+    targetX?: number | null
+    targetY?: number | null
+    targetID?: number | null
+  }
+  scale: number
+}) {
+  if (release.x == null || release.y == null) return null
+  let tx = release.targetX
+  let ty = release.targetY
+  if (tx == null || ty == null) {
+    if (release.targetID == null || release.targetID < 0) return null
+    const target = blocks.find((block) => block.block_id === release.targetID)?.bounds_milli
+    if (!target) return null
+    tx = (target.min_x + target.max_x) / 2
+    ty = (target.min_y + target.max_y) / 2
+  }
+  return (
+    <line
+      x1={release.x}
+      y1={-release.y}
+      x2={tx}
+      y2={-ty}
+      stroke="#ffffff"
+      strokeWidth={scale * 1.2}
+      strokeDasharray={`${scale * 4} ${scale * 2}`}
+    />
   )
 }

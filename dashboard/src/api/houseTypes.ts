@@ -140,12 +140,21 @@ export interface PuzzleOverview {
 export interface PuzzleDrop {
   block_id: number
   target_id: number
+  candidate_target_id?: number
+  candidate_target_x_milli?: number | null
+  candidate_target_y_milli?: number | null
+  nearest_compatible_target_id?: number
+  nearest_target_x_milli?: number | null
+  nearest_target_y_milli?: number | null
+  nearest_distance_milli?: number | null
   outcome: string
+  rule_state?: string
   release_x_milli: number
   release_y_milli: number
   target_x_milli: number
   target_y_milli: number
   attempt_id: string
+  legacy_coordinates?: boolean
 }
 
 export interface PuzzleDropMap {

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { PuzzleDrop, PuzzleHouseBlock } from '../api/houseTypes'
+import { DropInspectionCard } from './DropInspectionCard'
+import type { DropCluster } from './dropClustering'
 import { UNPLAYED, paintFor } from './houseColors'
 import { type HouseMetric, metricReading } from './houseMetrics'
-import { DropLayer, SupportLayer, supportColorByBlock } from './houseOverlays'
+import { CanvasOverlays, supportColorByBlock } from './houseOverlays'
 
 // Milli-unit world space is y-up; SVG is y-down. Negating y at render time
 // keeps every stored coordinate in the one space the exporter, the
@@ -89,100 +91,97 @@ type Props = {
     targetY?: number | null
     targetID?: number | null
   } | null
+  onSelectAttempt?: (id: string) => void
 }
 
 // The art is cropped to its opaque pixels, whose extent is exactly the
 // union of block bounds — so it is placed at that rect with no stored
 // offset. preserveAspectRatio="none" is correct here precisely because
 // the two rects are the same rect; letterboxing would misalign it.
-export function HouseCanvas({ blocks, wave, selected, onSelect, interactive = true, title, artUrl, mode = 'both', drops, placed, active, missing, support, metric = 'fall', replayRelease }: Props) {
-  const [zoom, setZoom] = useState(1)
-  const extent = extentOf(blocks)
-  if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
-  const { width, height, box } = canvasViewport(extent, zoom)
-  const strokeWidth = width / 220
-  const supportColors = supportColorByBlock(support)
-  const showArt = artUrl && mode !== 'diagram'
-  const showDiagram = mode !== 'art'
+function CanvasZoomControls({ zoom, onZoom }: { zoom: number; onZoom: (fn: (v: number) => number) => void }) {
   return (
-    <div className="house-canvas-frame">
-      <div className="canvas-zoom" role="group" aria-label="House zoom">
-        <button type="button" onClick={() => setZoom((value) => Math.min(3, value * 1.4))}>Zoom in</button>
-        <button type="button" onClick={() => setZoom((value) => Math.max(1, value / 1.4))} disabled={zoom === 1}>Zoom out</button>
-        <button type="button" onClick={() => setZoom(1)} disabled={zoom === 1}>Reset view</button>
-      </div>
-      <svg viewBox={box} className="house-canvas" role="img" aria-label={title} style={{ aspectRatio: `${width}/${height}` }}>
-      {showArt && (
-        <image
-          href={artUrl}
-          x={extent.minX}
-          y={-extent.maxY}
-          width={width}
-          height={height}
-          preserveAspectRatio="none"
-        />
-      )}
-      {showDiagram &&
-        blocks.map((block) => (
-          <BlockShape
-            key={block.block_id}
-            block={block}
-            dimmed={wave != null && block.wave_index !== wave}
-            isSelected={selected === block.block_id}
-            overArt={!!showArt}
-            strokeWidth={strokeWidth}
-            interactive={interactive}
-            onSelect={onSelect}
-            metric={metric}
-            replay={placed ? { standing: placed.has(block.block_id), active: active === block.block_id, missing: !!missing?.has(block.block_id) } : undefined}
-            supportColor={supportColors.get(block.block_id)}
-          />
-        ))}
-      {support && <SupportLayer blocks={blocks} support={support} scale={strokeWidth} />}
-      {replayRelease && <ReplayArrow blocks={blocks} release={replayRelease} scale={strokeWidth} />}
-      {drops && drops.length > 0 && <DropLayer drops={drops} scale={strokeWidth} />}
-      </svg>
+    <div className="canvas-zoom" role="group" aria-label="House zoom">
+      <button type="button" onClick={() => onZoom((v) => Math.min(3, v * 1.4))}>Zoom in</button>
+      <button type="button" onClick={() => onZoom((v) => Math.max(1, v / 1.4))} disabled={zoom === 1}>Zoom out</button>
+      <button type="button" onClick={() => onZoom(() => 1)} disabled={zoom === 1}>Reset view</button>
     </div>
   )
 }
 
-function ReplayArrow({
-  blocks,
-  release,
-  scale,
-}: {
-  blocks: PuzzleHouseBlock[]
-  release: {
-    x?: number | null
-    y?: number | null
-    targetX?: number | null
-    targetY?: number | null
-    targetID?: number | null
+function useHouseDropSelection(drops?: PuzzleDrop[], selected?: number | null, wave?: number | null) {
+  const [activeDrop, setActiveDrop] = useState<PuzzleDrop | null>(null)
+  const [activeCluster, setActiveCluster] = useState<DropCluster | null>(null)
+  useEffect(() => {
+    setActiveDrop(null)
+    setActiveCluster(null)
+  }, [drops, selected, wave])
+  const clear = () => {
+    setActiveDrop(null)
+    setActiveCluster(null)
   }
-  scale: number
-}) {
-  if (release.x == null || release.y == null) return null
-  let tx = release.targetX
-  let ty = release.targetY
-  if (tx == null || ty == null) {
-    if (release.targetID == null || release.targetID < 0) return null
-    const target = blocks.find((block) => block.block_id === release.targetID)?.bounds_milli
-    if (!target) return null
-    tx = (target.min_x + target.max_x) / 2
-    ty = (target.min_y + target.max_y) / 2
-  }
+  return { activeDrop, setActiveDrop, activeCluster, setActiveCluster, clear }
+}
+
+export function HouseCanvas(p: Props) {
+  const [zoom, setZoom] = useState(1)
+  const sel = useHouseDropSelection(p.drops, p.selected, p.wave)
+  const extent = extentOf(p.blocks)
+  if (!extent) return <p className="muted">This house has no shapes yet — upload its geometry to draw it.</p>
+  const { width, height, box } = canvasViewport(extent, zoom)
+  const strokeWidth = width / 220
+  const showArt = !!p.artUrl && p.mode !== 'diagram'
+
   return (
-    <line
-      x1={release.x}
-      y1={-release.y}
-      x2={tx}
-      y2={-ty}
-      stroke="#ffffff"
-      strokeWidth={scale * 1.2}
-      strokeDasharray={`${scale * 4} ${scale * 2}`}
-    />
+    <div className="house-canvas-frame">
+      <CanvasZoomControls zoom={zoom} onZoom={setZoom} />
+      <svg viewBox={box} className="house-canvas" role="img" aria-label={p.title} style={{ aspectRatio: `${width}/${height}` }} onClick={sel.clear}>
+        {showArt && <image href={p.artUrl} x={extent.minX} y={-extent.maxY} width={width} height={height} preserveAspectRatio="none" />}
+        {p.mode !== 'art' && (
+          <HouseDiagramBlocks
+            blocks={p.blocks} wave={p.wave} selected={p.selected} showArt={showArt} strokeWidth={strokeWidth}
+            interactive={p.interactive ?? true} onSelect={p.onSelect} metric={p.metric ?? 'fall'} placed={p.placed}
+            active={p.active} missing={p.missing} supportColors={supportColorByBlock(p.support)}
+          />
+        )}
+        <CanvasOverlays
+          blocks={p.blocks} scale={strokeWidth} support={p.support} replayRelease={p.replayRelease}
+          drops={p.drops} activeDrop={sel.activeDrop} activeCluster={sel.activeCluster}
+          onSelectDrop={sel.setActiveDrop} onSelectCluster={sel.setActiveCluster}
+        />
+      </svg>
+      {(sel.activeDrop || sel.activeCluster) && (
+        <DropInspectionCard drop={sel.activeDrop} cluster={sel.activeCluster} onClose={sel.clear} onSelectAttempt={p.onSelectAttempt} />
+      )}
+    </div>
   )
 }
+
+function HouseDiagramBlocks(p: {
+  blocks: PuzzleHouseBlock[]; wave?: number | null; selected?: number | null; showArt: boolean; strokeWidth: number;
+  interactive: boolean; onSelect?: (id: number) => void; metric: HouseMetric; placed?: Set<number> | null;
+  active?: number | null; missing?: Set<number>; supportColors: Map<number, string>;
+}) {
+  return (
+    <>
+      {p.blocks.map((block) => (
+        <BlockShape
+          key={block.block_id}
+          block={block}
+          dimmed={p.wave != null && block.wave_index !== p.wave}
+          isSelected={p.selected === block.block_id}
+          overArt={p.showArt}
+          strokeWidth={p.strokeWidth}
+          interactive={p.interactive}
+          onSelect={p.onSelect}
+          metric={p.metric}
+          replay={p.placed ? { standing: p.placed.has(block.block_id), active: p.active === block.block_id, missing: !!p.missing?.has(block.block_id) } : undefined}
+          supportColor={p.supportColors.get(block.block_id)}
+        />
+      ))}
+    </>
+  )
+}
+
 
 type ReplayState = { standing: boolean; active: boolean; missing: boolean }
 

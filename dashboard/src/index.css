@@ -698,4 +698,113 @@ details.attempts { margin-top: 1.5rem; }
   color: var(--text);
 }
 
+/* Drop Map & Inspection Overlay (Stage 5D) */
+.drop-inspection-card {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  max-width: min(320px, calc(100% - 2rem));
+  background: var(--bg-alt, #1c2331);
+  border: 1px solid var(--border, #2e384d);
+  border-radius: 8px;
+  padding: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  font-size: 0.85rem;
+}
 
+.drop-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border, #2e384d);
+  padding-bottom: 0.35rem;
+}
+
+.drop-header-outcome {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.drop-outcome-badge {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid #0b0d10;
+}
+
+.drop-card-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #8b9bb4);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.drop-card-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text, #f0f4fc);
+}
+
+.drop-card-body p {
+  margin: 0.3rem 0;
+}
+
+.drop-breakdown-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0;
+}
+
+.drop-breakdown-item {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  border: 1px solid var(--border, #2e384d);
+}
+
+.drop-replay-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.drop-replay-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #8b9bb4);
+}
+
+.drop-replay-buttons {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.drop-replay-btn {
+  background: var(--accent, #3b82f6);
+  color: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.drop-replay-btn:hover {
+  filter: brightness(1.15);
+}
+
+.drop-marker-group:focus-visible,
+.drop-cluster-group:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 3px;
+}
