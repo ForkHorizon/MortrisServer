@@ -28,4 +28,7 @@ func (s *Server) registerAnalyticsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/houses/{city}/{house}/funnel", s.requireSession(s.handlePuzzleWaveFunnel))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/houses/{city}/{house}/attempts", s.requireSession(s.handlePuzzleAttempts))
 	mux.HandleFunc("GET /api/v1/analytics/gameplay/attempts/{id}/replay", s.requireSession(s.handlePuzzleReplay))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/devices", s.requireSession(s.handlePuzzleDevices))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/devices/{id}/memory-timeline", s.requireSession(s.handlePuzzleDeviceMemoryTimeline))
+	mux.HandleFunc("GET /api/v1/analytics/gameplay/memory-timeline", s.requireSession(s.handlePuzzleDeviceMemoryTimeline))
 }

@@ -7,7 +7,7 @@ import { useNewEventBadge } from '../hooks/useNewEventBadge'
 
 // '/' is deliberately absent: on this host it renders the house wall, so
 // a nav link still labelled "Overview" would point at Houses and lie.
-const HOUSE_ART_NAV = new Set(['/houses', '/gameplay'])
+const HOUSE_ART_NAV = new Set(['/houses', '/gameplay', '/devices'])
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/catalog', label: 'Catalog', end: false },
   { to: '/houses', label: 'Houses', end: false, managerOnly: true },
   { to: '/gameplay', label: 'Gameplay Diagnostics', end: false, managerOnly: true },
+  { to: '/devices', label: 'Device Diagnostics', end: false, managerOnly: true },
   { to: '/system', label: 'System Health', end: false },
   { to: '/policy', label: 'Policy', end: false },
   { to: '/project', label: 'Project settings', end: false, managerOnly: true },

@@ -23,6 +23,7 @@ const AccountsPage = lazy(() => import('./pages/AccountsPage').then((m) => ({ de
 const HousesPage = lazy(() => import('./pages/HousesPage').then((m) => ({ default: m.HousesPage })))
 const HouseDetailPage = lazy(() => import('./pages/HouseDetailPage').then((m) => ({ default: m.HouseDetailPage })))
 const GameplayDiagnosticsPage = lazy(() => import('./pages/GameplayDiagnosticsPage').then((m) => ({ default: m.GameplayDiagnosticsPage })))
+const DeviceDiagnosticsPage = lazy(() => import('./pages/DeviceDiagnosticsPage').then((m) => ({ default: m.DeviceDiagnosticsPage })))
 
 const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: boolean }> = [
   { path: '/', Page: isHouseArtHost() ? HousesPage : OverviewPage, adminOnly: isHouseArtHost() },
@@ -36,6 +37,7 @@ const dashboardRoutes: Array<{ path: string; Page: ComponentType; adminOnly?: bo
   { path: '/houses', Page: HousesPage, adminOnly: true },
   { path: '/houses/:city/:house', Page: HouseDetailPage, adminOnly: true },
   { path: '/gameplay', Page: GameplayDiagnosticsPage, adminOnly: true },
+  { path: '/devices', Page: DeviceDiagnosticsPage, adminOnly: true },
   { path: '/system', Page: SystemHealthPage },
   { path: '/policy', Page: PolicyAdminPage },
   { path: '/project', Page: ProjectAdminPage },

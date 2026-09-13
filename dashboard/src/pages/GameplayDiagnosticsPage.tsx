@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiGet } from '../api/client'
 import type { GameplayAttempt, GameplayDiagnostics, GameplayPlayersResult, TimelineResult } from '../api/types'
 import { useAuth } from '../auth/useAuth'
@@ -126,6 +127,9 @@ function PlayersSection({ project, from, to }: { project: string; from: string; 
   const timeline = useApiData<TimelineResult | null>(fetchTimeline, `installation:${project}:${selectedPlayer}`)
   return <>
     <p>The player ID is the SDK installation ID, not a game account or person. Select it to inspect every raw event for that device.</p>
+    <p style={{ marginBottom: '1rem' }}>
+      <Link to="/devices">Open Dedicated Device &amp; Memory Diagnostics</Link> for hardware memory cohorts, deduplication, and active-play memory timelines.
+    </p>
     <Freshness loading={players.loading} error={players.error} stale={players.stale} updatedAt={players.updatedAt} loadingLabel="Loading players…" />
     {players.data && <DataTable caption="Anonymous player devices" rows={players.data.players} getRowKey={(r) => r.install_id} columns={[
       { key: 'install_id', label: 'Player ID', render: (r) => <button type="button" className="entity-id" title={r.install_id} onClick={() => setSelectedPlayer(r.install_id)}>{shortId(r.install_id)}</button> },
