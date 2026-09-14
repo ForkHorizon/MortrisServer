@@ -40,7 +40,7 @@ func TestPuzzleQuality_CleanChainIsGreen(t *testing.T) {
 	session := "21111111-1111-4111-8111-111111111111"
 	seedInstallation(t, pool, projectID, install, &now)
 
-	if _, err := pool.Exec(ctx, `INSERT INTO puzzle_content_revisions (project_id, content_revision, schema_version, catalog) VALUES ($1,'rev-clean',2,'{}'::jsonb)`, projectID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO puzzle_content_revisions (project_id, content_revision, schema_version, catalog) VALUES ($1,'rev-clean',2,'{}'::jsonb) ON CONFLICT (project_id, content_revision) DO NOTHING`, projectID); err != nil {
 		t.Fatalf("seed revision: %v", err)
 	}
 
@@ -93,8 +93,8 @@ func TestPuzzleQuality_CleanChainIsGreen(t *testing.T) {
 	if q.CheckpointMismatches != 0 {
 		t.Errorf("checkpoint mismatches = %d, want 0 (hash matches placed_block_ids)", q.CheckpointMismatches)
 	}
-	if q.DistinctHouseRuns != 1 || q.DistinctWaveAttempts != 1 || q.DistinctInteractions != 1 {
-		t.Errorf("distinct counts = runs:%d attempts:%d interactions:%d, want 1/1/1", q.DistinctHouseRuns, q.DistinctWaveAttempts, q.DistinctInteractions)
+	if q.DistinctHouseRuns != 1 || q.DistinctWaveAttempts != 1 || q.DistinctInteractions != 2 {
+		t.Errorf("distinct counts = runs:%d attempts:%d interactions:%d, want 1/1/2", q.DistinctHouseRuns, q.DistinctWaveAttempts, q.DistinctInteractions)
 	}
 	// Regression: a nil Reasons slice on the green path marshals to JSON
 	// `null`, and the dashboard's `quality.status_reasons.length` crashes

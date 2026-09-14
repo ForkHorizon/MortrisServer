@@ -219,7 +219,7 @@ func updateReplayInteraction(open map[string]bool, step PuzzleReplayStep) {
 	}
 	if step.Name == "detail_taken" {
 		open[step.InteractionID] = true
-	} else if step.Name == "detail_returned" || step.Name == "interaction_abandoned" || step.Name == "placement_resolved" {
+	} else if step.Name == "detail_returned" || step.Name == "interaction_abandoned" || (step.Name == "placement_resolved" && step.Outcome == "placed") {
 		delete(open, step.InteractionID)
 	}
 }

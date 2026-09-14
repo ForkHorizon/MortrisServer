@@ -93,10 +93,13 @@ func waveScopeCTE(scope TrafficScope) string {
 		  AND ($6::text IS NULL OR last_build_number=$6)
 		  AND ` + scope.runPredicate("fully_natural") + `
 	), waves AS (
-		SELECT properties->>'house_run_id' house_run_id, (properties->>'wave_index')::int wave_index,
+		SELECT properties->>'house_run_id' house_run_id,
+		       CASE WHEN properties->>'wave_index' ~ '^[0-9]{1,9}$' THEN (properties->>'wave_index')::int ELSE 0 END AS wave_index,
 		       BOOL_OR(name='wave_completed') completed_here
 		FROM events
-		WHERE project_id=$1 AND (properties->>'city_id')::int=$2 AND (properties->>'house_id')::int=$3
+		WHERE project_id=$1
+		  AND CASE WHEN properties->>'city_id' ~ '^[0-9]{1,9}$' THEN (properties->>'city_id')::int END = $2
+		  AND CASE WHEN properties->>'house_id' ~ '^[0-9]{1,9}$' THEN (properties->>'house_id')::int END = $3
 		  AND properties ? 'house_run_id' AND properties ? 'wave_index'
 		  AND properties->>'house_run_id' IN (SELECT house_run_id FROM runs)
 		GROUP BY 1,2

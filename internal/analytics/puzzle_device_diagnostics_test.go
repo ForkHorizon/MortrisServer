@@ -205,13 +205,13 @@ func TestPuzzleDevices_DeduplicationIntegration(t *testing.T) {
 	seedEvents(t, pool, projectID, []seedEvent{
 		{
 			EventID: "e0000000-0000-4000-8000-000000000001", InstallID: install,
-			SessionID: "s0000000-0000-4000-8000-000000000001", Sequence: 1,
+			SessionID: "a0000000-0000-4000-8000-000000000001", Sequence: 1,
 			Name: "device_profile", Kind: "product", EffectiveAt: now,
 			Properties: map[string]any{"device_total_memory_mb": 3000, "graphics_memory_mb": 512},
 		},
 		{
 			EventID: "e0000000-0000-4000-8000-000000000002", InstallID: install,
-			SessionID: "s0000000-0000-4000-8000-000000000001", Sequence: 2,
+			SessionID: "a0000000-0000-4000-8000-000000000001", Sequence: 2,
 			Name: "device_profile", Kind: "product", EffectiveAt: now.Add(time.Second),
 			Properties: map[string]any{"device_total_memory_mb": 4096, "graphics_memory_mb": 1024},
 		},

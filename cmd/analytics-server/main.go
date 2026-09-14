@@ -15,7 +15,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: analytics-server <migrate|serve|export-events|parity-report|create-admin|gen-events> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: analytics-server <migrate|serve|export-events|parity-report|create-admin|gen-events|smoke-check> [flags]")
 		os.Exit(2)
 	}
 
@@ -48,6 +48,8 @@ func main() {
 		err = runImportPuzzleGeometry(ctx, cfg, os.Args[2:])
 	case "import-puzzle-art":
 		err = runImportPuzzleArt(ctx, cfg, os.Args[2:])
+	case "smoke-check":
+		err = runSmokeCheck(ctx, cfg, os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", os.Args[1])
 		os.Exit(2)

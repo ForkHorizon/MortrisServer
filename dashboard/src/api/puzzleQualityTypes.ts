@@ -86,6 +86,16 @@ export interface PuzzleQuality {
 
   status: PuzzleQualityStatus
   status_reasons: string[]
+  alerts?: PuzzleQualityAlert[]
+}
+
+export interface PuzzleQualityAlert {
+  category: string
+  severity: 'warning' | 'critical'
+  message: string
+  metric: string
+  value: number
+  action_link: string
 }
 
 // Stage 3 traffic segmentation (section 6) — mirrors

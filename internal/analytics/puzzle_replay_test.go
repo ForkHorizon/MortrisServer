@@ -241,17 +241,17 @@ func TestReplayCarriesDeveloperCommand(t *testing.T) {
 func seedOverflowTestEvents(t *testing.T, pool *pgxpool.Pool, projectID, installID string, now time.Time) {
 	seedEvents(t, pool, projectID, []seedEvent{
 		{
-			EventID: "a1111111-1111-4111-8111-111111111111", InstallID: installID, SessionID: "s1", Sequence: 1,
+			EventID: "a1111111-1111-4111-8111-111111111111", InstallID: installID, SessionID: "b1111111-1111-4111-8111-111111111111", Sequence: 1,
 			Name: "wave_started", Kind: "product", EffectiveAt: now,
 			Properties: map[string]any{"attempt_id": "attempt-overflow", "city_id": 1, "house_id": 1, "wave_index": "99999999999999999999999999", "active_elapsed_ms": "99999999999999999999999999"},
 		},
 		{
-			EventID: "a2222222-2222-4222-8222-222222222222", InstallID: installID, SessionID: "s1", Sequence: 2,
+			EventID: "a2222222-2222-4222-8222-222222222222", InstallID: installID, SessionID: "b1111111-1111-4111-8111-111111111111", Sequence: 2,
 			Name: "wave_started", Kind: "product", EffectiveAt: now.Add(time.Second),
 			Properties: map[string]any{"attempt_id": "", "city_id": 1, "house_id": 1},
 		},
 		{
-			EventID: "a3333333-3333-4333-8333-333333333333", InstallID: installID, SessionID: "s1", Sequence: 3,
+			EventID: "a3333333-3333-4333-8333-333333333333", InstallID: installID, SessionID: "b1111111-1111-4111-8111-111111111111", Sequence: 3,
 			Name: "wave_started", Kind: "product", EffectiveAt: now.Add(2 * time.Second),
 			Properties: map[string]any{"attempt_id": "attempt-valid", "city_id": 1, "house_id": 1, "wave_index": 1, "active_elapsed_ms": 5000},
 		},

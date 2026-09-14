@@ -22,7 +22,8 @@ LEFT JOIN puzzle_content_revisions r
   ON r.project_id=e.project_id AND r.content_revision=e.properties->>'content_revision'
 WHERE e.project_id=$1 AND e.effective_at>=$2 AND e.effective_at<$3
 	  AND ($6::text IS NULL OR e.build_number=$6)
-  AND (e.properties->>'city_id')::int=$4 AND (e.properties->>'house_id')::int=$5
+  AND CASE WHEN e.properties->>'city_id' ~ '^[0-9]{1,9}$' THEN (e.properties->>'city_id')::int END = $4
+  AND CASE WHEN e.properties->>'house_id' ~ '^[0-9]{1,9}$' THEN (e.properties->>'house_id')::int END = $5
   AND e.name='placement_resolved'
   AND COALESCE(e.properties->>'origin','player')='player'
 	  AND COALESCE(e.properties->>'progress_origin','natural')='natural'`, projectID, from, to, detail.CityID, detail.HouseID, build).Scan(&legacy, &corrected)
@@ -113,8 +114,9 @@ type PuzzleQuality struct {
 	// Status is "grey" (no data), "green", "amber" or "red" per the plan
 	// doc's exact definitions; Reasons is the plain-language drill-down so
 	// a number is never shown without an explanation.
-	Status  string   `json:"status"`
-	Reasons []string `json:"status_reasons"`
+	Status  string               `json:"status"`
+	Reasons []string             `json:"status_reasons"`
+	Alerts  []PuzzleQualityAlert `json:"alerts"`
 }
 
 type PuzzleQualityRejection struct {
@@ -141,7 +143,7 @@ func GetPuzzleQuality(ctx context.Context, pool *pgxpool.Pool, projectID string,
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	q := &PuzzleQuality{Rejections: []PuzzleQualityRejection{}, Builds: []PuzzleQualityBuild{}, Reasons: []string{}}
+	q := &PuzzleQuality{Rejections: []PuzzleQualityRejection{}, Builds: []PuzzleQualityBuild{}, Reasons: []string{}, Alerts: []PuzzleQualityAlert{}}
 	// Builds is always unfiltered: it is what lets the dashboard offer the
 	// filter in the first place.
 	if err := loadQualityBuilds(ctx, pool, q, projectID, from, to); err != nil {
@@ -178,6 +180,7 @@ func GetPuzzleQuality(ctx context.Context, pool *pgxpool.Pool, projectID string,
 		return nil, err
 	}
 	q.computeStatus()
+	q.Alerts = ComputeQualityAlerts(q, projectID, build)
 	return q, nil
 }
 

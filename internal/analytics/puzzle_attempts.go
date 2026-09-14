@@ -43,13 +43,13 @@ SELECT properties->>'attempt_id', MIN(install_id::text),
        COALESCE(MAX(CASE WHEN properties->>'wave_index' ~ '^[0-9]{1,9}$' THEN (properties->>'wave_index')::int ELSE NULL END), 0),
        COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),''),
        COALESCE((array_agg(properties->>'progress_origin' ORDER BY effective_at DESC) FILTER (WHERE properties ? 'progress_origin'))[1],'natural'),
-       COALESCE(BOOL_OR(properties->>'origin'='developer_menu' OR properties->>'close_reason'='developer_command' OR name LIKE 'developer_%'),false)
+       COALESCE(BOOL_OR(properties->>'origin'='developer_menu' OR properties->>'close_reason'='developer_command' OR COALESCE(properties->>'progress_origin', 'natural') != 'natural' OR name LIKE 'developer_%'),false)
 FROM events
 WHERE project_id=$1 AND effective_at>=$4 AND effective_at<$5
 	  AND ($6::text IS NULL OR build_number=$6)
   AND properties ? 'attempt_id' AND properties->>'attempt_id' IS NOT NULL AND properties->>'attempt_id' != ''
-  AND properties->>'city_id'=$2::text
-  AND properties->>'house_id'=$3::text
+  AND CASE WHEN properties->>'city_id' ~ '^[0-9]+$' THEN (properties->>'city_id')::int END = $2
+  AND CASE WHEN properties->>'house_id' ~ '^[0-9]+$' THEN (properties->>'house_id')::int END = $3
 GROUP BY 1
 ORDER BY MIN(effective_at) DESC
 LIMIT 200`, projectID, cityID, houseID, from, to, optionalBuild(build))

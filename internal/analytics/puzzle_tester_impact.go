@@ -123,7 +123,7 @@ func loadTesterResetsAndCompletions(ctx context.Context, pool *pgxpool.Pool, imp
 		  COUNT(*) FILTER (WHERE properties->>'developer_command' NOT LIKE 'Reset%')
 		FROM events
 		WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3
-		  AND name='developer_command_completed' AND (properties->>'progress_changed')::boolean IS TRUE
+		  AND name='developer_command_completed' AND COALESCE(properties->>'progress_changed','') = 'true'
 	`, projectID, from, to).Scan(&impact.Resets, &impact.ProgressCompletions); err != nil {
 		return err
 	}

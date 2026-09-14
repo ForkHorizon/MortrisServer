@@ -69,7 +69,7 @@ func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projec
 			  AND properties ? '%s'
 		), scoped AS (
 			SELECT e.install_id, e.properties->>'%s' AS scope_id,
-			       CASE WHEN properties->>'%s' ~ '^[0-9]+$' THEN (properties->>'%s')::int END AS idx
+			       CASE WHEN properties->>'%s' ~ '^[0-9]{1,9}$' THEN (properties->>'%s')::int END AS idx
 			FROM events e JOIN touched t ON t.install_id=e.install_id AND t.scope_id=e.properties->>'%s'
 			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
 			  AND e.properties ? '%s'
@@ -91,6 +91,13 @@ func queryPropertyIndexIntegrity(ctx context.Context, pool *pgxpool.Pool, projec
 // interaction_id is complete, not orphaned (see the plan doc's explicit
 // warning against the naive check).
 func loadQualityInteractionAndCheckpointIntegrity(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
+	if err := loadQualityOrphanInteractions(ctx, pool, q, projectID, from, to, build); err != nil {
+		return err
+	}
+	return loadQualityCheckpointIntegrity(ctx, pool, q, projectID, from, to, build)
+}
+
+func loadQualityOrphanInteractions(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	rows, err := pool.Query(ctx, `
 		WITH touched AS (
 			SELECT DISTINCT install_id, properties->>'interaction_id' AS interaction_id
@@ -119,8 +126,11 @@ func loadQualityInteractionAndCheckpointIntegrity(ctx context.Context, pool *pgx
 			rows.Close()
 			return err
 		}
-		terminal := placed || hasReturn || hasAbandoned
-		if !hasTake || !hasRelease || !hasResolution || !terminal {
+		if hasAbandoned {
+			continue
+		}
+		terminal := placed || hasReturn
+		if hasTake && (!hasRelease || !hasResolution || !terminal) {
 			orphans++
 		}
 	}
@@ -129,12 +139,15 @@ func loadQualityInteractionAndCheckpointIntegrity(ctx context.Context, pool *pgx
 		return err
 	}
 	q.OrphanInteractions = orphans
+	return nil
+}
 
+func loadQualityCheckpointIntegrity(ctx context.Context, pool *pgxpool.Pool, q *PuzzleQuality, projectID string, from, to time.Time, build *string) error {
 	checkpoints, err := pool.Query(ctx, `
-		SELECT properties->>'placed_block_ids', properties->>'placed_state_hash'
+		SELECT COALESCE(properties->>'placed_block_ids',''), COALESCE(properties->>'placed_state_hash','')
 		FROM events
 		WHERE project_id=$1 AND effective_at>=$2 AND effective_at<$3 AND ($4::text IS NULL OR build_number=$4)
-		  AND name='state_checkpoint' AND COALESCE(properties->>'placed_state_hash','')<>''
+		  AND name='state_checkpoint'
 	`, projectID, from, to, build)
 	if err != nil {
 		return err
@@ -146,7 +159,7 @@ func loadQualityInteractionAndCheckpointIntegrity(ctx context.Context, pool *pgx
 		if err := checkpoints.Scan(&ids, &hash); err != nil {
 			return err
 		}
-		if hash != fmt.Sprintf("%x", sha256.Sum256([]byte(ids))) {
+		if hash == "" || hash != fmt.Sprintf("%x", sha256.Sum256([]byte(ids))) {
 			mismatches++
 		}
 	}
@@ -220,7 +233,7 @@ func loadQualityDeveloperPairing(ctx context.Context, pool *pgxpool.Pool, q *Puz
 			WHERE e.project_id=$1 AND ($4::text IS NULL OR e.build_number=$4)
 			GROUP BY 1,2
 		)
-		SELECT COUNT(*) FILTER (WHERE has_start AND NOT has_terminal),
+		SELECT COUNT(*) FILTER (WHERE (has_start AND NOT has_terminal) OR (has_terminal AND NOT has_start)),
 		       COUNT(*) FILTER (WHERE has_mutation AND NOT has_start)
 		FROM actions
 	`, projectID, from, to, build).Scan(&q.UnpairedDeveloperCommands, &q.UnpairedDeveloperMutations)

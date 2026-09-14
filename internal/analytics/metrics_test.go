@@ -44,6 +44,8 @@ func seedProject(t *testing.T, pool *pgxpool.Pool, strictCatalog bool) string {
 	t.Helper()
 	ctx := context.Background()
 	projectID := "test-" + t.Name()
+	cleanProject(ctx, pool, projectID)
+	t.Cleanup(func() { cleanProject(context.Background(), pool, projectID) })
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO projects (id, environment, display_name, strict_catalog, enabled)
 		VALUES ($1, 'test', $1, $2, true)
