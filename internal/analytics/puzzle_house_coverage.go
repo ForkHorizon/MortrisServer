@@ -14,16 +14,17 @@ package analytics
 // puzzleHousesCoverageCTEs is concatenated into puzzleHousesCTEs. It never
 // takes a scope argument — see the file doc comment.
 func puzzleHousesCoverageCTEs() string {
-	return `, natural_runs AS (
-    SELECT city_id, house_id, house_run_id, completed, last_event_at, last_build_number
-    FROM puzzle_house_run_classification
-    WHERE project_id=$1 AND last_event_at>=$3 AND last_event_at<$4
-      AND ($5::text IS NULL OR last_build_number=$5) AND fully_natural
-), all_runs AS (
-    SELECT city_id, house_id, COUNT(*) total_runs
+	return `, runs_in_window AS (
+    SELECT city_id, house_id, house_run_id, completed, fully_natural, last_event_at, last_build_number
     FROM puzzle_house_run_classification
     WHERE project_id=$1 AND last_event_at>=$3 AND last_event_at<$4
       AND ($5::text IS NULL OR last_build_number=$5)
+), natural_runs AS (
+    SELECT city_id, house_id, house_run_id, completed, last_event_at, last_build_number
+    FROM runs_in_window WHERE fully_natural
+), all_runs AS (
+    SELECT city_id, house_id, COUNT(*) total_runs
+    FROM runs_in_window
     GROUP BY 1,2
 ), run_agg AS (
     SELECT city_id, house_id, COUNT(*) started, COUNT(*) FILTER (WHERE completed) completed,
@@ -31,14 +32,9 @@ func puzzleHousesCoverageCTEs() string {
            (array_agg(last_build_number ORDER BY last_event_at DESC))[1] last_build
     FROM natural_runs GROUP BY 1,2
 ), wave_reach AS (
-    SELECT CASE WHEN properties->>'city_id' ~ '^[0-9]{1,9}$' THEN (properties->>'city_id')::int END city_id,
-           CASE WHEN properties->>'house_id' ~ '^[0-9]{1,9}$' THEN (properties->>'house_id')::int END house_id,
-           COUNT(DISTINCT CASE WHEN properties->>'wave_index' ~ '^[0-9]{1,9}$' THEN (properties->>'wave_index')::int END) waves_reached
-    FROM events
-    WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
-      AND ($5::text IS NULL OR build_number=$5)
-      AND properties ? 'house_run_id' AND properties ? 'wave_index'
-      AND properties->>'house_run_id' IN (SELECT house_run_id FROM natural_runs)
+    SELECT city_id, house_id, COUNT(DISTINCT wave_index) waves_reached
+    FROM ev
+    WHERE wave_index IS NOT NULL AND house_run_id IN (SELECT house_run_id FROM natural_runs)
     GROUP BY 1,2
 )`
 }

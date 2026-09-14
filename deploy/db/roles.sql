@@ -69,7 +69,8 @@ GRANT SELECT ON
     projects, installations, events, event_catalog, client_policy_rules,
     maintenance_runs, ingestion_stats, event_rejection_stats, event_property_drift
     TO analytics_reader;
-ALTER ROLE analytics_reader SET statement_timeout = '5s';
+ALTER ROLE analytics_reader SET statement_timeout = '30s';
+ALTER ROLE analytics_reader SET jit = off;
 
 -- analytics_backup: minimum privilege for a logical/physical backup tool
 -- (pgBackRest or pg_dump). pg_read_all_data is the native predefined role

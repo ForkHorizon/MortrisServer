@@ -150,36 +150,35 @@ WITH house AS (
     SELECT attempt_id FROM puzzle_wave_attempt_classification
     WHERE project_id=$1 AND last_event_at>=$3 AND last_event_at<$4 AND ` + scope.runPredicate("fully_natural") + `
 ), ev AS (
-    SELECT (properties->>'city_id')::int city_id,
-           (properties->>'house_id')::int house_id,
-           name, properties, install_id
+    SELECT (properties->>'city_id')::int city_id, (properties->>'house_id')::int house_id,
+           name, properties->>'attempt_id' attempt_id, properties->>'house_run_id' house_run_id,
+           CASE WHEN properties->>'wave_index' ~ '^[0-9]{1,9}$' THEN (properties->>'wave_index')::int END wave_index,
+           properties->>'block_id' block_id, properties->>'outcome' outcome, install_id
     FROM events
     WHERE project_id=$1 AND effective_at>=$3 AND effective_at<$4
       AND ($5::text IS NULL OR build_number=$5)
       AND properties ? 'house_id' AND properties ? 'attempt_id'
       AND ` + scope.eventPredicate() + `
 ), attempt_agg AS (
-    -- Attempts/completions need the whole attempt in scope (plan section 6).
     SELECT city_id, house_id,
-           COUNT(DISTINCT properties->>'attempt_id') attempts,
-           COUNT(DISTINCT properties->>'attempt_id') FILTER (WHERE name='house_completed') completed_attempts,
+           COUNT(DISTINCT attempt_id) attempts,
+           COUNT(DISTINCT attempt_id) FILTER (WHERE name='house_completed') completed_attempts,
            COUNT(DISTINCT install_id) unique_installations
-    FROM ev WHERE properties->>'attempt_id' IN (SELECT attempt_id FROM eligible_attempts)
+    FROM ev WHERE attempt_id IN (SELECT attempt_id FROM eligible_attempts)
     GROUP BY 1,2
 ), metric_agg AS (
-    -- Placement-quality metrics stay event-level (plan section 6, rule 1).
     SELECT city_id, house_id,
            COUNT(*) FILTER (WHERE name='placement_resolved') placements,
-           COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%') falls,
+           COUNT(*) FILTER (WHERE name='placement_resolved' AND outcome LIKE 'fell_%') falls,
            COUNT(*) FILTER (WHERE name='hint_used') hints,
-           COALESCE(MODE() WITHIN GROUP (ORDER BY properties->>'outcome') FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'), '') dominant_failure
+           COALESCE(MODE() WITHIN GROUP (ORDER BY outcome) FILTER (WHERE name='placement_resolved' AND outcome LIKE 'fell_%'), '') dominant_failure
     FROM ev GROUP BY 1,2
 ), detail_counts AS (
 	SELECT city_id, house_id, COUNT(*) played_details,
 		COUNT(*) FILTER (WHERE placements >= 5) reliable_details
 	FROM (
-		SELECT city_id, house_id, properties->>'block_id' block_id, COUNT(*) placements
-		FROM ev WHERE name='placement_resolved' AND properties ? 'block_id'
+		SELECT city_id, house_id, block_id, COUNT(*) placements
+		FROM ev WHERE name='placement_resolved' AND block_id IS NOT NULL
 		GROUP BY 1,2,3
 	) blocks
 	GROUP BY 1,2

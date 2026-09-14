@@ -75,7 +75,7 @@ func loadGameplayFriction(ctx context.Context, pool *pgxpool.Pool, result *Gamep
 		  AND ($4::int IS NULL OR (properties->>'city_id')::int=$4) AND ($5::int IS NULL OR (properties->>'house_id')::int=$5) AND ($6::int IS NULL OR (properties->>'wave_index')::int=$6)
 		  AND ` + scope.eventPredicate() + `
 	)
-	SELECT (properties->>'block_id')::int, COALESCE((properties->>'candidate_target_id')::int,-1), COUNT(*),
+	SELECT COALESCE((properties->>'block_id')::int, 0), COALESCE((properties->>'candidate_target_id')::int,-1), COUNT(*),
 	       COUNT(*) FILTER (WHERE properties->>'outcome'='placed'), COUNT(*) FILTER (WHERE properties->>'outcome' LIKE 'fell_%'),
 	       COUNT(*) FILTER (WHERE ordinal=1 AND properties->>'outcome' LIKE 'fell_%')
 	FROM p GROUP BY 1,2 ORDER BY 5 DESC,3 DESC LIMIT 500`
@@ -104,8 +104,12 @@ func loadGameplayFriction(ctx context.Context, pool *pgxpool.Pool, result *Gamep
 // count); placements/falls/hints stay event-level.
 func loadGameplayDaily(ctx context.Context, pool *pgxpool.Pool, result *GameplayDiagnostics, projectID string, from, to time.Time, loc *time.Location, filter GameplayFilter, scope TrafficScope) error {
 	query := `WITH ` + eligibleAttemptsCTE(scope) + `
-	SELECT TO_CHAR(effective_at AT TIME ZONE $7,'YYYY-MM-DD'), (properties->>'city_id')::int, (properties->>'house_id')::int, (properties->>'wave_index')::int,
-	       properties->>'content_revision', build_number,
+	SELECT TO_CHAR(effective_at AT TIME ZONE $7,'YYYY-MM-DD'),
+	       COALESCE((properties->>'city_id')::int, 0),
+	       COALESCE((properties->>'house_id')::int, 0),
+	       COALESCE((properties->>'wave_index')::int, 0),
+	       COALESCE(properties->>'content_revision', ''),
+	       COALESCE(build_number, ''),
 	       COUNT(DISTINCT properties->>'attempt_id') FILTER (WHERE properties->>'attempt_id' IN (SELECT attempt_id FROM eligible)),
 	       COUNT(*) FILTER (WHERE name='placement_resolved'),
 	       COUNT(*) FILTER (WHERE name='placement_resolved' AND properties->>'outcome' LIKE 'fell_%'),

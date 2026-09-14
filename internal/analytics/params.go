@@ -15,7 +15,7 @@ import (
 const (
 	defaultWindow = 7 * 24 * time.Hour
 	maxWindow     = 90 * 24 * time.Hour // section 10.1: "Maximum raw-data window is 90 days"
-	queryTimeout  = 5 * time.Second
+	queryTimeout  = 30 * time.Second
 )
 
 // ParseTimezone validates the "timezone" query parameter against the IANA
