@@ -64,9 +64,24 @@ see that repo's own `deploy/README.md` first if starting from nothing).
    `db/roles.sql` **twice**: once before migrations (creates the roles),
    once after (grants table privileges) — see that file's header.
 4. rsync this repo to `/opt/mortris` (not `git clone` — the VPS has no
-   GitHub auth configured, same reason ForkHorizon deploys via rsync).
+   GitHub auth configured, same reason ForkHorizon deploys via rsync):
+   ```sh
+   rsync -av --delete \
+     --exclude='.git' \
+     --exclude='bin' \
+     --exclude='backups' \
+     --exclude='dashboard/node_modules' \
+     --exclude='dashboard/dist' \
+     --exclude='.DS_Store' \
+     ./ 143.14.22.61:/opt/mortris/
+   ```
+   Note: rsync preserves permissions (`-a` includes `--perms`), preserving mode `0755`
+   on executable scripts such as `deploy/backup/sync-to-drive.sh`.
+   `mortris-backup-sync.service` runs as `User=postgres` and requires execute
+   permissions on this script.
 5. `make build` in `/opt/mortris` (needs Node 22+ for the dashboard
-   build, already present for ForkHorizon).
+   build, already present for ForkHorizon). This also ensures mode `0755`
+   on `deploy/backup/sync-to-drive.sh`.
 6. `analytics-server migrate` (as `MORTRIS_MIGRATOR_DSN`) — **use the
    real subcommand, not a raw `psql -f migrations/*.sql` pipe**, or
    `schema_migrations` silently stays empty (this happened once during

@@ -16,11 +16,13 @@ dashboard/dist/index.html:
 	printf '<!doctype html><title>Mortris</title><body>dashboard not built yet — run `make dashboard`</body>' > dashboard/dist/index.html
 
 lint: dashboard/dist/index.html
-	go vet ./...
+	test -x deploy/backup/sync-to-drive.sh
+	test -x deploy/smoke-test.sh
+	go vet ./cmd/... ./internal/...
 	gofmt -l . | (! grep .)
 
 test: dashboard/dist/index.html
-	go test ./...
+	go test ./cmd/... ./internal/...
 	cd dashboard && npm test
 
 # Builds the real Vite frontend into dashboard/dist, which Go embeds
@@ -29,5 +31,6 @@ dashboard:
 	cd dashboard && npm ci && npm run build
 
 build: dashboard
+	chmod 0755 deploy/backup/sync-to-drive.sh
 	go build -o bin/analytics-server ./cmd/analytics-server
 	go build -o bin/mcp-analytics ./cmd/mcp-analytics
