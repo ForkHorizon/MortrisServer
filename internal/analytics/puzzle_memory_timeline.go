@@ -136,9 +136,10 @@ func createTimelinePoint(r rawTimelineRow, state *timelineState) MemoryTimelineP
 	if r.BuildNumber != "" {
 		state.lastBuild = r.BuildNumber
 	}
-	if r.Name == "app_backgrounded" {
+	switch r.Name {
+	case "app_backgrounded":
 		state.isBackgrounded = true
-	} else if r.Name == "app_foregrounded" {
+	case "app_foregrounded":
 		state.isBackgrounded = false
 	}
 
