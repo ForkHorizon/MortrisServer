@@ -6,11 +6,12 @@ fmt:
 # internal/httpapi imports the dashboard package (dashboard/embed.go),
 # whose //go:embed target must contain at least one file to compile at
 # all — go vet/build/test all fail on a totally fresh checkout without
-# this. dashboard/dist is gitignored (real builds go through Vite, which
-# empties the directory on every run — a tracked placeholder there would
-# just get wiped), so this rule creates a cheap one instead. `make build`
-# (via the `dashboard` target below) overwrites it with the real thing;
-# once that's happened this rule is a no-op (the file already exists).
+# this. dashboard/dist/index.html is now a tracked placeholder (needed by
+# the unified CI Scope go-quality check, which runs bare go vet/gofmt with
+# no bootstrap step) — the rest of dashboard/dist stays gitignored, and
+# Vite's build still empties/overwrites the directory on every real build.
+# This rule is now a no-op on a fresh checkout; it only matters if the
+# tracked placeholder is ever deleted without a real `make dashboard` run.
 dashboard/dist/index.html:
 	mkdir -p dashboard/dist
 	printf '<!doctype html><title>Mortris</title><body>dashboard not built yet — run `make dashboard`</body>' > dashboard/dist/index.html
