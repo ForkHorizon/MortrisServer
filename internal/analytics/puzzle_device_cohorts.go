@@ -32,16 +32,6 @@ func memoryTierForMB(ramMB int64) string {
 	return "high"
 }
 
-// newCohortTemplate creates an initialized cohort struct for a tier.
-func newCohortTemplate(tier, label string, minMB, maxMB int64) MemoryCohort {
-	return MemoryCohort{
-		Tier:        tier,
-		Label:       label,
-		MinMemoryMB: minMB,
-		MaxMemoryMB: maxMB,
-	}
-}
-
 // initializeCohorts prepares the standard cohort buckets.
 func initializeCohorts() map[string]*MemoryCohort {
 	cohorts := map[string]*MemoryCohort{
